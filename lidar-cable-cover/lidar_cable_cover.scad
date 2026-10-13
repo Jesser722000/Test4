@@ -9,6 +9,11 @@
 //    "raceway"  Low-profile cable channel cover (lidar -> hub, hub -> edge).
 //    "edge"     Raceway that wraps over the deck edge and down the face,
 //               so the USB cable disappears into the electronics bay.
+//    "bar_raceway"  Wedge-shaped channel that tucks into the corner where a
+//               bar (mast column / base housing) meets the deck, taped to both.
+//    "bar_housing"  Same wedge, wider in the middle: hides the USB adapter
+//               board against the bar, with tapered ends that blend into
+//               the bar raceway.
 //    "preview"  All parts laid out on a mock deck (for looking only).
 //    "hub_underside"  The hub flipped over, to see the inside.
 //
@@ -54,6 +59,30 @@ ramp_end    = false; // ramp on the far end (leave square to butt against hub)
 edge_run    = 40;    // length lying on the top of the deck
 edge_drop   = 30;    // length hanging down the front face
 edge_cut    = 6;     // 45° chamfer on the outside corner
+
+/* ---------- Bar-hugging pieces (run along the mast / base housing) ---------- */
+// Cross-section (u = out from the bar face, v = up):
+//   back face flat against the bar, flat top, 45° slope down to a thin lip on the deck.
+bar_back    = 1.6;   // wall between the channel and the bar face
+bar_H       = 13;    // height against the bar
+bar_flat    = 9;     // flat top before the 45° slope
+bar_lip     = 2;     // height of the front lip on the deck
+bch_w       = 10;    // channel width (out from the bar)
+bch_h       = 6.5;   // channel height
+bar_len     = 120;   // piece length
+// End cuts: 0 = square, 1 = 45° mitre for an inside corner (bar turns toward you),
+//          -1 = 45° mitre for an outside corner (wrapping round the end of a bar).
+// bar_len is measured along the bar face, so set it to the bar's length.
+bar_start   = 0;
+bar_end     = 0;
+side_entry  = 40;    // where a flat raceway joins from the side (-1 = none)
+
+hs_pocket_w   = 22;  // board pocket, out from the bar (board lies flat)
+hs_pocket_h   = 12;  // board pocket height (USB-C plug overmold is the tallest part)
+hs_pocket_len = 85;  // board + plug length
+hs_H          = 16;  // housing height against the bar
+hs_flat       = 26;  // flat top before the 45° slope
+hs_taper      = 18;  // length of each tapered end
 
 $fn = 64;
 eps = 0.01;
@@ -186,10 +215,69 @@ module edge_wrap() {
 }
 
 // ------------------------------------------------------------
+//  BAR-HUGGING PIECES (installed: deck at z=0, bar face at y=0,
+//  bar occupies y<0, piece runs along +X)
+// ------------------------------------------------------------
+// Wedge cross-section: H tall at the bar, `flat` wide on top, 45° down to `lip`.
+function wedge_w(H, flat) = flat + (H - bar_lip);
+module wedge_profile(H, flat) {
+    polygon([[0, 0], [wedge_w(H, flat), 0], [wedge_w(H, flat), bar_lip],
+             [flat, H], [0, H]]);
+}
+module wedge_bar(len, H, flat) {
+    rotate([90, 0, 90]) linear_extrude(len) wedge_profile(H, flat);
+}
+
+// Removes everything past a 45° plan-view mitre at x = x0.
+// dir = +1 cuts the far end, -1 the start; mode 1 inside corner, -1 outside.
+module mitre_cut(x0, dir, mode) {
+    if (mode != 0)
+        translate([x0, 0, -1]) rotate([0, 0, dir * mode * 45])
+            translate([dir > 0 ? 0 : -300, -150, 0]) cube([300, 300, 100]);
+}
+
+module bar_channel(len) {
+    translate([-1, bar_back, -eps]) cube([len + 2, bch_w, bch_h + eps]);
+}
+
+module bar_raceway(len = bar_len, ms = bar_start, me = bar_end, entry = side_entry) {
+    W = wedge_w(bar_H, bar_flat);
+    // an outside mitre has to reach W past the bar's end at the front lip
+    x0 = ms == -1 ? -W : 0;
+    x1 = me == -1 ? len + W : len;
+    difference() {
+        translate([x0, 0, 0]) wedge_bar(x1 - x0, bar_H, bar_flat);
+        translate([x0, 0, 0]) bar_channel(x1 - x0);
+        // side entry: notch through the front lip for a flat raceway
+        if (entry >= 0)
+            translate([entry - ch_w/2 - 0.5, bar_back + bch_w - 1, -eps])
+                cube([ch_w + 1, W, bch_h + eps]);
+        mitre_cut(0, -1, ms);
+        mitre_cut(len, 1, me);
+    }
+}
+
+module bar_housing() {
+    L = hs_pocket_len + 2 * hs_taper;
+    difference() {
+        hull() {
+            translate([hs_taper, 0, 0]) wedge_bar(hs_pocket_len, hs_H, hs_flat);
+            wedge_bar(eps, bar_H, bar_flat);
+            translate([L - eps, 0, 0]) wedge_bar(eps, bar_H, bar_flat);
+        }
+        bar_channel(L);
+        translate([hs_taper, bar_back, -eps]) cube([hs_pocket_len, hs_pocket_w, hs_pocket_h + eps]);
+    }
+}
+
+// ------------------------------------------------------------
 //  Print orientation wrappers (flip upside-down onto the bed)
 // ------------------------------------------------------------
 module hub_print()     { translate([0, 0, hub_h]) rotate([180, 0, 0]) hub(); }
 module raceway_print() { translate([0, 0, rw_h]) rotate([180, 0, 0]) raceway(); }
+// bar pieces print as installed: flat bottom on the bed, bridges over the channel
+module bar_raceway_print() { bar_raceway(); }
+module bar_housing_print() { bar_housing(); }
 // edge: outer top of the run on the bed, drop leg standing up
 module edge_print()    { translate([0, 0, rw_h]) rotate([180, 0, 0]) edge_wrap(); }
 
@@ -197,20 +285,27 @@ module edge_print()    { translate([0, 0, rw_h]) rotate([180, 0, 0]) edge_wrap()
 //  Preview scene (installed orientation on a mock deck)
 // ------------------------------------------------------------
 module preview() {
+    hs_L = hs_pocket_len + 2 * hs_taper;
     // deck (top at z=0, front face at x=0)
     color("#2e2e2e") translate([-400, -150, -6]) cube([400, 300, 6]);
     color("#2e2e2e") translate([-6, -150, -70]) cube([6, 300, 64]);
+    // the bar (mast base housing) — occupies y<0
+    color("#1c1c1c") translate([-300, -90, 0]) cube([260, 90, 60]);
+    color("#1c1c1c") translate([-200, -70, 0]) cube([60, 60, 300]);
     // lidar on its mount (stand-in)
-    color("#151515") translate([-330, 0, 0]) {
+    color("#151515") translate([-260, 110, 0]) {
         translate([-40, -40, 0]) cube([80, 80, 3]);
         translate([-28, -28, 3]) cube([56, 56, 22]);
         translate([0, 0, 25]) cylinder(d = 56, h = 20);
     }
+    W = wedge_w(bar_H, bar_flat);
     color("#5a5a5a") {
-        translate([-290, 0, 0]) raceway(50, true, false);   // lidar -> hub
-        translate([-170, 0, 0]) hub();                      // board + cable coil
-        translate([-100, 0, 0]) raceway(60, false, false);  // hub -> edge
-        edge_wrap();                                        // over the edge
+        // lidar -> side entry of the bar raceway
+        translate([-260, 110 - 40, 0]) rotate([0, 0, -90]) raceway(110 - 40 - W, true, false);
+        translate([-300, 0, 0]) bar_raceway(70, 0, 0, 40);
+        translate([-230, 0, 0]) bar_housing();
+        translate([-230 + hs_L, 0, 0]) bar_raceway(-40 - (-230 + hs_L), 0, 0, -1);
+        translate([0, bar_back + bch_w/2, 0]) edge_wrap();
     }
 }
 // Hub seen from underneath, to show the inside
@@ -219,5 +314,7 @@ module hub_underside() { rotate([180, 0, 0]) hub(); }
 if (PART == "hub")     hub_print();
 if (PART == "raceway") raceway_print();
 if (PART == "edge")    edge_print();
+if (PART == "bar_raceway") bar_raceway_print();
+if (PART == "bar_housing") bar_housing_print();
 if (PART == "preview") preview();
 if (PART == "hub_underside") hub_underside();
