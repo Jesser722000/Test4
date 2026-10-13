@@ -1,41 +1,48 @@
-# RPLIDAR cable cover kit
+# RPLIDAR cable cover kit (v3 – stealth)
 
-Hides the lidar cable and the green USB adapter board by running them along the black bars on the deck (the mast column and its base housing). The covers tuck into the corner where a bar meets the deck.
+This is one continuous, low, rounded cover. It runs from the lidar to the mast base, along the bars, over the USB adapter board, and over the deck edge into the electronics bay. It's designed to look like part of the robot rather than an add-on.
 
-| File | What it is | Print |
+![assembled](render_preview.png)
+
+| Detail | Board housing (cutaway) |
+|---|---|
+| ![edge](render_edge.png) | ![cutaway](render_cutaway.png) |
+
+## Parts (print 1 of each)
+| File | Size (L × W × H mm) | What it does |
 |---|---|---|
-| `bar_raceway.stl` | 120 mm wedge-shaped channel, 20 mm deep × 13 mm tall. Its back sits flat against the bar and its front slopes down at 45° to the deck. It has a side opening 40 mm from the start for the cable coming from the lidar. | 1–3× |
-| `bar_housing.stl` | Same wedge, but 40 × 16 mm in the middle, to hide the adapter board and its USB-C plug against the bar. Its tapered ends blend into the bar raceway. | 1× |
-| `raceway.stl` | 120 mm flat channel (24 × 8 mm) with a 45° ramp on one end, for the short open stretch from the lidar to the bar | 1× |
-| `edge.stl` | Channel that goes over the deck edge and 30 mm down the front face | 1× |
-| `hub.stl` | *(Optional, from the first version)* 140 × 85 mm box that also stores the coiled-up spare USB cable | — |
-| `lidar_cable_cover.scad` | Parametric source (OpenSCAD) | — |
+| `lidar_run.stl` | 90 × 22 × 8 | Low dome from the lidar to the bar. Its tapered nose sits at the lidar, and the cable slips out of the tip. |
+| `bar_run_entry.stl` | 70 × 16 × 11 | Quarter-round strip that tucks into the corner where the bar meets the deck. It has a built-in T-junction where the lidar run joins. |
+| `board_housing.stl` | 125 × 24 × 26 | The adapter board **stands on its edge** against the bar, so the housing stays narrow. Its ends taper smoothly into the bar strips. |
+| `bar_run_exit.stl` | 40 + 25 transition | Bar strip that flows into a dome where the cable leaves the bar |
+| `deck_run.stl` | 60 × 22 × 8 | Plain dome segment to bridge any gap. Change `deck_len` to adjust. |
+| `edge_top.stl` + `edge_drop.stl` | — | Two-piece elbow that goes over the deck edge. They join on a 45° mitre with dowels, so the corner looks like one piece. |
 
-**Routing:** lidar → `raceway` (short, flat) → side opening in `bar_raceway` → along the bar → `bar_housing` (over the board) → `bar_raceway` → `edge` → down into the electronics bay.
+Earlier versions (box hub, wedge strips) are still in git history.
 
-**Turning corners along a bar:** set `bar_start` / `bar_end` in the `.scad` file. Use `1` for an inside corner (where two bars meet) or `-1` to wrap around the end of a bar. Each setting cuts a 45° mitre, so two pieces meet cleanly. Set `bar_len` to the length of that bar face. Set `side_entry` (mm from the start) to where the lidar cable joins, or `-1` for no opening.
+**Routing:** lidar → `lidar_run` → `bar_run_entry` (T-junction) → `board_housing` → `bar_run_exit` → `deck_run` → `edge_top` / `edge_drop` → into the bay.
 
-![preview](render_preview.png)
+## Measure first (dimensions are estimated from photos)
+1. **Board pocket**: 85 long × 9 deep × 19 tall. The board stands on edge with its JST connector facing out from the bar. Set `pocket_*` to change it.
+2. **Cables**: the channel is 9 × 5 mm, sized for the lidar cable plus the USB-C cable side by side (each about 4 mm or less).
+3. **Bar length** and where the lidar cable should join it. Set `entry_len`, `entry_at` and `exit_len`.
+4. **Distances**: from the lidar to the bar (`lidar_len`), and from the end of the bar to the deck edge (`deck_len`).
+5. **Deck front face**: set `edge_drop` to how far the cable must go down to reach the bay opening.
 
-## Measure these first (dimensions are estimated from photos)
-1. **Adapter board + USB-C plug**: they must fit in the housing pocket (85 long × 22 deep × 12 tall mm). Set `hs_pocket_*` to change it.
-2. **Cable diameters**: the channel is 10 × 6 mm, which fits two cables of about 4 mm side by side.
-3. **Bar lengths**: measure each bar face the cable will follow and set `bar_len`.
-4. **Front face**: check where the cable enters the electronics bay. Set `edge_drop` to that depth.
+**Turning a corner along the bars:** set `mitre_start` / `mitre_end`. Use `1` for an inside corner or `-1` for an outside corner. Each cuts a 45° mitre so two strips meet cleanly.
 
-To change something, edit the variables at the top of the `.scad` file and re-export:
-`openscad -o hub.stl -D 'PART="hub"' lidar_cable_cover.scad` (PART = `bar_raceway` | `bar_housing` | `raceway` | `edge` | `hub`).
+Re-export after edits: `openscad -o bar_run_entry.stl -D 'PART="bar_run_entry"' lidar_cable_cover.scad`
 
 ## Printing
-- The STLs are already oriented for printing and need **no supports**. The bar pieces print flat side down. The others print upside down.
-- PLA or PETG, black matte. Use a 0.2 mm layer height, 3 walls and 15–20 % infill.
+- The STLs are already oriented for printing and need **no supports**. Every piece prints flat side down, and the elbow halves print with their mitres at 45°.
+- **Matte black PLA or PETG** blends best with the robot's powder-coat finish.
+- Use 0.16–0.2 mm layers, 3 walls, 20 % infill, and seam position "rear" or "aligned" so the seam lands on the hidden side.
+- Use a smooth PEI or glass bed, or a textured sheet if you want the base faces matte as well.
 
-## Installing
-1. Stick the adapter board to the deck right against the bar, using a small foam tape pad.
-2. Lay the cables into the corner where the bar meets the deck.
-3. Put VHB / 3M double-sided tape on the back face (bar side) and the front strip (deck side) of each bar piece. Press each piece into the corner over the cables.
-4. Bring the lidar cable over in the flat `raceway`. Put its ramp end at the lidar and butt the other end against the side opening of the bar raceway.
-5. Where the cable leaves the bar, the `edge` piece takes it over the deck edge and into the bay.
-6. Coil the spare USB cable and fasten it with a velcro strap **inside the electronics bay** where it's out of sight. (Or use the optional `hub` to coil it up on the deck.)
-
-Tip: if you can get a **short (25–30 cm) USB-C cable, ideally right-angle**, you won't have much slack to coil, and the hub can be made smaller (`hub_len`, `hub_wid`).
+## Assembly
+1. **Dowels:** cut 1.75 mm filament into 8 mm pieces (2 per joint). Press them into the end holes so neighbouring pieces line up flush with no visible step. Add a drop of CA glue for a permanent joint, or leave them dry so the pieces can come apart.
+2. **Board:** stand the board in the housing pocket on its edge, with the components facing away from the bar. It's a snug friction fit.
+3. **Cables:** lay the cables in the corner along the bar and press the strips over them.
+4. **Tape:** the back and bottom faces have 0.4 mm recesses for thin double-sided tape (3M 9088, 468MP or similar), so the pieces sit tight against the bar and deck without a visible tape line.
+5. **Elbow:** dowel `edge_top` and `edge_drop` together at the mitre and fit them over the deck edge.
+6. **Spare USB cable:** coil it and strap it inside the electronics bay. Better still, swap to a 25–30 cm right-angle USB-C cable.

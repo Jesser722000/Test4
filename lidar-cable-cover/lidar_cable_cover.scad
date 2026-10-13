@@ -1,320 +1,266 @@
 // ============================================================
-//  RPLIDAR cable + USB adapter board cover kit
+//  RPLIDAR cable cover kit — v3 "stealth"
 //  Parametric OpenSCAD — all dimensions in mm.
 //
-//  Parts (set PART below, or pass -D 'PART="hub"' on the CLI):
-//    "hub"      Open-bottom cover that drops over the green USB adapter
-//               board and hides the coiled-up excess USB cable.
-//               Snap-out knockouts let cables in/out wherever you need.
-//    "raceway"  Low-profile cable channel cover (lidar -> hub, hub -> edge).
-//    "edge"     Raceway that wraps over the deck edge and down the face,
-//               so the USB cable disappears into the electronics bay.
-//    "bar_raceway"  Wedge-shaped channel that tucks into the corner where a
-//               bar (mast column / base housing) meets the deck, taped to both.
-//    "bar_housing"  Same wedge, wider in the middle: hides the USB adapter
-//               board against the bar, with tapered ends that blend into
-//               the bar raceway.
-//    "preview"  All parts laid out on a mock deck (for looking only).
-//    "hub_underside"  The hub flipped over, to see the inside.
+//  One continuous, low, rounded cover that runs from the lidar, along
+//  the bars (mast column / base housing), over the board, and down
+//  into the electronics bay. Pieces join with hidden filament dowels.
 //
-//  Every part is already oriented for printing: no supports needed.
+//  Parts (set PART, or -D 'PART="bar_run_entry"' on the CLI):
+//    "lidar_run"      Low dome from the lidar to the bar. Tapered nose
+//                     at the lidar end; the cable slips out of its tip.
+//    "bar_run_entry"  Quarter-round strip tucked into the bar/deck corner,
+//                     with a moulded-in T where the lidar run joins.
+//    "board_housing"  Board stands on edge against the bar; ends taper
+//                     smoothly into the bar runs.
+//    "bar_run_exit"   Bar strip that flows into a dome where the cable
+//                     leaves the bar.
+//    "deck_run"       Plain dome segment (cut to length with deck_len).
+//    "edge_top"       Elbow, top half: lies on the deck, mitred at the edge.
+//    "edge_drop"      Elbow, bottom half: goes down the front face.
+//    "preview"        Assembled on a mock robot base.
+//    "cutaway"        Board housing with the board and cables shown inside.
+//
+//  All parts are already oriented for printing. No supports.
+//  Joints: 1.75 mm filament offcuts as dowels (cut to 8 mm).
 // ============================================================
 
 PART = "preview";
 
-/* ---------- Hub cover ---------- */
-hub_len     = 140;   // outside length (X)
-hub_wid     = 85;    // outside width  (Y)
-hub_h       = 20;    // outside height — keep below the lidar's scan window
-hub_r       = 10;    // plan-view corner radius
-hub_chamfer = 3;     // chamfer on the top edge
-wall        = 2.4;   // side wall thickness
-roof        = 2.4;   // top thickness
+/* ---------- Cable channel (same everywhere) ---------- */
+ch_w   = 9;      // two ~4 mm cables side by side
+ch_h   = 5;
+wall   = 1.2;    // wall between channel and the bar
 
-spool_od    = 30;    // post the spare USB cable is coiled around
-spool_wall  = 2.4;
-spool_pos   = [33, 6];   // post centre, relative to hub centre
+/* ---------- Bar strip: quarter-round, back against the bar ---------- */
+bar_W  = 16;     // how far it comes out onto the deck
+bar_H  = 11;     // how high it sits on the bar
 
-pad         = 12;    // solid corner blocks (double-sided tape pads)
+/* ---------- Deck dome: half-ellipse ---------- */
+dome_a = 11;     // half width  (22 mm wide)
+dome_b = 8;      // height
 
-// Knockouts: cable slots along the bottom edge of the walls.
-ko_w        = 11;    // slot width  (fits 2 cables side by side)
-ko_h        = 8;     // slot height
-ko_slit     = 0.6;   // gap around the snap-out plug
-ko_web      = 1.0;   // wall left at the hinge line (snap it here)
-// [side, offset along that side]   side: 0=-X end, 1=+X end, 2=-Y side, 3=+Y side
-knockouts   = [[0, 0], [1, 0], [2, -35], [2, 35], [3, -35], [3, 35]];
+/* ---------- Board housing (board stands on its edge) ---------- */
+pocket_d   = 9;    // board thickness incl. the JST connector
+pocket_h   = 19;   // board width (standing up) + clearance
+pocket_len = 85;   // board + USB-C plug overmold
+hs_W       = 24;
+hs_H       = 26;
+hs_taper   = 20;   // smooth transition to the bar strip at each end
 
-/* ---------- Raceway (shared by "raceway" and "edge") ---------- */
-rw_w        = 24;    // outside width
-rw_h        = 8;     // outside height
-rw_chamfer  = 3;     // top edge chamfers
-ch_w        = 10;    // channel width  (two ~4 mm cables side by side)
-ch_h        = 6;     // channel height
-rw_len      = 120;   // straight piece length (fits most beds; print several)
-ramp_start  = true;  // 45° ramp on the start end (cable emerges through it)
-ramp_end    = false; // ramp on the far end (leave square to butt against hub)
+/* ---------- Piece lengths / options ---------- */
+entry_len  = 70;   // bar_run_entry length
+entry_at   = 35;   // where the lidar T joins, from the start
+stub_len   = 15;   // how far the T sticks out past the bar strip
+exit_len   = 40;   // bar_run_exit length along the bar
+exit_T     = 25;   // length of the quarter-round -> dome transition
+lidar_len  = 90;
+lidar_fade = 25;   // tapered nose length
+deck_len   = 60;
+edge_run   = 40;   // elbow: length on top of the deck
+edge_drop  = 30;   // elbow: length down the front face
+// End mitres for bar_run_entry: 0 square, 1 inside corner, -1 outside corner
+mitre_start = 0;
+mitre_end   = 0;
 
-/* ---------- Edge wrap ---------- */
-edge_run    = 40;    // length lying on the top of the deck
-edge_drop   = 30;    // length hanging down the front face
-edge_cut    = 6;     // 45° chamfer on the outside corner
+/* ---------- Details ---------- */
+tape_rec = 0.4;    // recess depth for thin double-sided tape (flush fit)
+pin_d    = 1.95;   // dowel hole for 1.75 mm filament
+pin_len  = 4;      // hole depth each side
 
-/* ---------- Bar-hugging pieces (run along the mast / base housing) ---------- */
-// Cross-section (u = out from the bar face, v = up):
-//   back face flat against the bar, flat top, 45° slope down to a thin lip on the deck.
-bar_back    = 1.6;   // wall between the channel and the bar face
-bar_H       = 13;    // height against the bar
-bar_flat    = 9;     // flat top before the 45° slope
-bar_lip     = 2;     // height of the front lip on the deck
-bch_w       = 10;    // channel width (out from the bar)
-bch_h       = 6.5;   // channel height
-bar_len     = 120;   // piece length
-// End cuts: 0 = square, 1 = 45° mitre for an inside corner (bar turns toward you),
-//          -1 = 45° mitre for an outside corner (wrapping round the end of a bar).
-// bar_len is measured along the bar face, so set it to the bar's length.
-bar_start   = 0;
-bar_end     = 0;
-side_entry  = 40;    // where a flat raceway joins from the side (-1 = none)
-
-hs_pocket_w   = 22;  // board pocket, out from the bar (board lies flat)
-hs_pocket_h   = 12;  // board pocket height (USB-C plug overmold is the tallest part)
-hs_pocket_len = 85;  // board + plug length
-hs_H          = 16;  // housing height against the bar
-hs_flat       = 26;  // flat top before the 45° slope
-hs_taper      = 18;  // length of each tapered end
-
-$fn = 64;
+$fn = 72;
 eps = 0.01;
+cy  = wall + ch_w/2;          // channel centre, measured out from the bar
 
 // ------------------------------------------------------------
-//  Helpers
+//  Profiles (u across, v up)
 // ------------------------------------------------------------
-module rrect(l, w, r) {
-    offset(r = r) square([l - 2*r, w - 2*r], center = true);
-}
+function qpts(W, H, n = 48) =
+    concat([[0, 0]], [for (i = [0:n]) let(t = 90 * i / n) [W * cos(t), H * sin(t)]]);
+function dpts(a, b, n = 72) =
+    [for (i = [0:n]) let(t = 180 * i / n) [a * cos(t), b * sin(t)]];
 
-// Raceway cross-section in (u = across, v = up) — the outside shape.
-module rw_profile() {
-    c = rw_chamfer;
-    polygon([[-rw_w/2, 0], [rw_w/2, 0], [rw_w/2, rw_h - c],
-             [rw_w/2 - c, rw_h], [-rw_w/2 + c, rw_h], [-rw_w/2, rw_h - c]]);
-}
+// Extrude a 2D profile along +X (u -> Y, v -> Z)
+module along_x(len) rotate([90, 0, 90]) linear_extrude(len) children();
 
-// Profile extruded along +X from x=0 to x=len (installed orientation).
-module rw_bar(len) {
-    rotate([90, 0, 90]) linear_extrude(len) rw_profile();
-}
+module qbar(len, W = bar_W, H = bar_H) along_x(len) polygon(qpts(W, H));
+module dbar(len, a = dome_a, b = dome_b) along_x(len) polygon(dpts(a, b));
 
-// ------------------------------------------------------------
-//  HUB (modelled installed: deck at z=0, open side down)
-// ------------------------------------------------------------
-module hub_outer() {
-    hull() {
-        linear_extrude(hub_h - hub_chamfer) rrect(hub_len, hub_wid, hub_r);
-        translate([0, 0, hub_h - eps])
-            linear_extrude(eps) rrect(hub_len - 2*hub_chamfer,
-                                      hub_wid - 2*hub_chamfer,
-                                      hub_r - hub_chamfer);
-    }
-}
-
-module hub_cavity() {
-    translate([0, 0, -eps])
-        linear_extrude(hub_h - roof + eps)
-            rrect(hub_len - 2*wall, hub_wid - 2*wall, hub_r - wall);
-}
-
-// Places children on a wall: local X runs along the wall,
-// local Y points outward, origin at the wall's outer face, z=0 at the deck.
-module on_side(side, off) {
-    if (side == 0) translate([-hub_len/2, off, 0]) rotate([0, 0, 90])  children();
-    if (side == 1) translate([ hub_len/2, off, 0]) rotate([0, 0, -90]) children();
-    if (side == 2) translate([off, -hub_wid/2, 0]) rotate([0, 0, 180]) children();
-    if (side == 3) translate([off,  hub_wid/2, 0])                     children();
-}
-
-// Cuts that free a snap-out plug: two side slits + a score line on the inside.
-module knockout_cuts() {
-    // side slits, right through the wall
-    for (sx = [-1, 1])
-        translate([sx * (ko_w/2 + ko_slit/2) - ko_slit/2, -wall - 1, -eps])
-            cube([ko_slit, wall + 2, ko_h + eps]);
-    // score groove on the inside face along the top of the plug
-    translate([-ko_w/2 - ko_slit, -wall - 1, ko_h - 0.6])
-        cube([ko_w + 2*ko_slit, 1 + (wall - ko_web), 1.2]);
-}
-
-module hub() {
-    difference() {
-        union() {
-            difference() { hub_outer(); hub_cavity(); }
-            // corner tape pads
-            intersection() {
-                hub_outer();
-                for (sx = [-1, 1], sy = [-1, 1])
-                    translate([sx * (hub_len/2 - pad/2), sy * (hub_wid/2 - pad/2), (hub_h - roof)/2])
-                        cube([pad, pad, hub_h - roof + eps], center = true);
-            }
-            // spool post
-            translate([spool_pos[0], spool_pos[1], 0])
-                cylinder(d = spool_od, h = hub_h - roof + eps);
-        }
-        // hollow the spool post (saves plastic, still a full ring of tape area)
-        translate([spool_pos[0], spool_pos[1], -eps])
-            cylinder(d = spool_od - 2*spool_wall, h = hub_h - roof - 1);
-        for (k = knockouts) on_side(k[0], k[1]) knockout_cuts();
-    }
-}
+// Dowel holes — bar strip end face / dome end face, axis along X
+module bar_pins(x) for (p = [[12.5, 2.5], [cy, 8]])
+    translate([x, p[0], p[1]]) rotate([0, 90, 0]) cylinder(d = pin_d, h = 2 * pin_len, center = true, $fn = 24);
+module dome_pins(x, yc = 0) for (s = [-1, 1])
+    translate([x, yc + s * 7.5, 2]) rotate([0, 90, 0]) cylinder(d = pin_d, h = 2 * pin_len, center = true, $fn = 24);
 
 // ------------------------------------------------------------
-//  STRAIGHT RACEWAY (installed: base at z=0, runs along +X)
+//  Bar strip pieces (installed: deck z=0, bar face y=0, bar at y<0)
 // ------------------------------------------------------------
-module raceway(len = rw_len, rs = ramp_start, re = ramp_end) {
-    difference() {
-        rw_bar(len);
-        // channel
-        translate([-1, -ch_w/2, -eps]) cube([len + 2, ch_w, ch_h + eps]);
-        // 45° ramps: plane through the bottom edge of the end
-        if (rs)
-            translate([0, 0, 0]) rotate([0, -45, 0])
-                translate([-rw_h * 2, -rw_w, 0]) cube([rw_h * 2, rw_w * 2, rw_h * 3]);
-        if (re)
-            translate([len, 0, 0]) rotate([0, 45, 0])
-                translate([0, -rw_w, 0]) cube([rw_h * 2, rw_w * 2, rw_h * 3]);
-    }
-}
-
-// ------------------------------------------------------------
-//  EDGE WRAP (installed: deck top at z=0, deck front face at x=0,
-//  deck occupies x<0, z<0; run lies on top, drop hangs at x>=0)
-// ------------------------------------------------------------
-module edge_wrap() {
-    // half-space x - z >= 0 (beyond the 45° mitre line through the corner)
-    module beyond_mitre() rotate([0, 45, 0]) translate([0, -100, -100]) cube(200);
-    difference() {
-        union() {
-            // horizontal run, extended through the corner, cut at the mitre
-            difference() {
-                translate([-edge_run, 0, 0]) rw_bar(edge_run + rw_h);
-                beyond_mitre();
-            }
-            // vertical drop: profile whose base faces -X, running down
-            intersection() {
-                translate([0, 0, rw_h]) rotate([0, 90, 0]) rw_bar(edge_drop + rw_h);
-                beyond_mitre();
-            }
-        }
-        // outside corner chamfer
-        translate([rw_h, 0, rw_h]) rotate([0, 45, 0])
-            cube([edge_cut * sqrt(2), 2*rw_w, edge_cut * sqrt(2)], center = true);
-        // L-shaped channel
-        translate([-edge_run - 1, -ch_w/2, -eps]) cube([edge_run + 1 + ch_h, ch_w, ch_h + eps]);
-        translate([-eps, -ch_w/2, -edge_drop - 1]) cube([ch_h + eps, ch_w, edge_drop + 1 + ch_h]);
-    }
-}
-
-// ------------------------------------------------------------
-//  BAR-HUGGING PIECES (installed: deck at z=0, bar face at y=0,
-//  bar occupies y<0, piece runs along +X)
-// ------------------------------------------------------------
-// Wedge cross-section: H tall at the bar, `flat` wide on top, 45° down to `lip`.
-function wedge_w(H, flat) = flat + (H - bar_lip);
-module wedge_profile(H, flat) {
-    polygon([[0, 0], [wedge_w(H, flat), 0], [wedge_w(H, flat), bar_lip],
-             [flat, H], [0, H]]);
-}
-module wedge_bar(len, H, flat) {
-    rotate([90, 0, 90]) linear_extrude(len) wedge_profile(H, flat);
-}
-
-// Removes everything past a 45° plan-view mitre at x = x0.
-// dir = +1 cuts the far end, -1 the start; mode 1 inside corner, -1 outside.
 module mitre_cut(x0, dir, mode) {
     if (mode != 0)
         translate([x0, 0, -1]) rotate([0, 0, dir * mode * 45])
             translate([dir > 0 ? 0 : -300, -150, 0]) cube([300, 300, 100]);
 }
 
-module bar_channel(len) {
-    translate([-1, bar_back, -eps]) cube([len + 2, bch_w, bch_h + eps]);
+module bar_tape(x0, x1) {
+    // back face (against the bar) and bottom strip (on the deck)
+    translate([x0, -eps, 1.5]) cube([x1 - x0, tape_rec + eps, bar_H - 4]);
+    translate([x0, wall + ch_w + 1, -eps]) cube([x1 - x0, bar_W - wall - ch_w - 2.5, tape_rec + eps]);
 }
 
-module bar_raceway(len = bar_len, ms = bar_start, me = bar_end, entry = side_entry) {
-    W = wedge_w(bar_H, bar_flat);
-    // an outside mitre has to reach W past the bar's end at the front lip
-    x0 = ms == -1 ? -W : 0;
-    x1 = me == -1 ? len + W : len;
+module bar_run(len, ms = 0, me = 0, entry = -1, stub = stub_len, exitT = 0) {
+    x0 = ms == -1 ? -bar_W : 0;
+    x1 = me == -1 ? len + bar_W : len;
     difference() {
-        translate([x0, 0, 0]) wedge_bar(x1 - x0, bar_H, bar_flat);
-        translate([x0, 0, 0]) bar_channel(x1 - x0);
-        // side entry: notch through the front lip for a flat raceway
-        if (entry >= 0)
-            translate([entry - ch_w/2 - 0.5, bar_back + bch_w - 1, -eps])
-                cube([ch_w + 1, W, bch_h + eps]);
+        union() {
+            translate([x0, 0, 0]) qbar(x1 - x0);
+            if (entry >= 0)      // moulded-in T for the lidar run
+                translate([entry, 0, 0]) rotate([0, 0, 90]) dbar(bar_W + stub);
+            if (exitT > 0)       // flow from quarter-round into a dome
+                hull() {
+                    translate([len - eps, 0, 0]) qbar(eps);
+                    translate([len + exitT - eps, cy, 0]) dbar(eps);
+                }
+        }
+        // channel
+        translate([x0 - 1, wall, -eps]) cube([x1 - x0 + exitT + 2, ch_w, ch_h + eps]);
+        if (entry >= 0) {
+            translate([entry - ch_w/2, wall, -eps]) cube([ch_w, bar_W + stub + 1, ch_h + eps]);
+            translate([entry, bar_W + stub, 0]) rotate([0, 0, 90]) dome_pins(0);
+        }
+        bar_tape(max(x0, 0) + 2, min(x1, len) - 2);
         mitre_cut(0, -1, ms);
-        mitre_cut(len, 1, me);
+        if (exitT == 0) mitre_cut(len, 1, me);
+        if (ms == 0) bar_pins(0);
+        if (me == 0 && exitT == 0) bar_pins(len);
+        if (exitT > 0) dome_pins(len + exitT, cy);
     }
 }
 
-module bar_housing() {
-    L = hs_pocket_len + 2 * hs_taper;
+module board_housing() {
+    L = pocket_len + 2 * hs_taper;
     difference() {
         hull() {
-            translate([hs_taper, 0, 0]) wedge_bar(hs_pocket_len, hs_H, hs_flat);
-            wedge_bar(eps, bar_H, bar_flat);
-            translate([L - eps, 0, 0]) wedge_bar(eps, bar_H, bar_flat);
+            qbar(eps);
+            translate([hs_taper, 0, 0]) qbar(pocket_len, hs_W, hs_H);
+            translate([L - eps, 0, 0]) qbar(eps);
         }
-        bar_channel(L);
-        translate([hs_taper, bar_back, -eps]) cube([hs_pocket_len, hs_pocket_w, hs_pocket_h + eps]);
+        translate([-1, wall, -eps]) cube([L + 2, ch_w, ch_h + eps]);
+        translate([hs_taper, wall, -eps]) cube([pocket_len, pocket_d, pocket_h + eps]);
+        // tape pockets
+        translate([hs_taper, -eps, 2]) cube([pocket_len, tape_rec + eps, hs_H - 8]);
+        translate([hs_taper, wall + pocket_d + 1.5, -eps])
+            cube([pocket_len, hs_W - wall - pocket_d - 4, tape_rec + eps]);
+        bar_pins(0);
+        bar_pins(L);
     }
 }
 
 // ------------------------------------------------------------
-//  Print orientation wrappers (flip upside-down onto the bed)
+//  Dome pieces (installed: deck z=0, centred on y=0, along +X)
 // ------------------------------------------------------------
-module hub_print()     { translate([0, 0, hub_h]) rotate([180, 0, 0]) hub(); }
-module raceway_print() { translate([0, 0, rw_h]) rotate([180, 0, 0]) raceway(); }
-// bar pieces print as installed: flat bottom on the bed, bridges over the channel
-module bar_raceway_print() { bar_raceway(); }
-module bar_housing_print() { bar_housing(); }
-// edge: outer top of the run on the bed, drop leg standing up
-module edge_print()    { translate([0, 0, rw_h]) rotate([180, 0, 0]) edge_wrap(); }
+module dome_tape(x0, x1) for (s = [-1, 1])
+    translate([x0, s > 0 ? ch_w/2 + 2 : -dome_a + 1.2, -eps])
+        cube([x1 - x0, dome_a - 1.2 - ch_w/2 - 2, tape_rec + eps]);
+
+module deck_run(len, fade = 0) {
+    difference() {
+        hull() {
+            if (fade > 0) dbar(eps, 7.5, 6.2);       // slim nose
+            translate([fade, 0, 0]) dbar(len - fade);
+        }
+        translate([-1, -ch_w/2, -eps]) cube([len + 2, ch_w, ch_h + eps]);
+        dome_tape(fade + 2, len - 2);
+        if (fade == 0) dome_pins(0);
+        dome_pins(len);
+    }
+}
+
+// Elbow over the deck edge. Installed: deck top z=0, front face x=0,
+// deck at x<0, z<0. Split on the 45° plane x = z; dowels across the joint.
+module beyond_mitre() rotate([0, 45, 0]) translate([0, -100, -100]) cube(200);
+module elbow_pins() for (s = [-1, 1])
+    translate([2, s * 7.5, 2]) rotate([0, 135, 0]) cylinder(d = pin_d, h = 2 * pin_len, center = true, $fn = 24);
+
+module edge_top() {
+    difference() {
+        translate([-edge_run, 0, 0]) dbar(edge_run + dome_b);
+        beyond_mitre();
+        translate([-edge_run - 1, -ch_w/2, -eps]) cube([edge_run + 1 + ch_h, ch_w, ch_h + eps]);
+        dome_tape(-edge_run + 2, -2);
+        dome_pins(-edge_run);
+        elbow_pins();
+    }
+}
+module edge_drop() {
+    difference() {
+        intersection() {
+            translate([0, 0, dome_b]) rotate([0, 90, 0]) dbar(edge_drop + dome_b);
+            beyond_mitre();
+        }
+        translate([-eps, -ch_w/2, -edge_drop - 1]) cube([ch_h + eps, ch_w, edge_drop + 1 + ch_h]);
+        elbow_pins();
+    }
+}
 
 // ------------------------------------------------------------
-//  Preview scene (installed orientation on a mock deck)
+//  Print orientation
 // ------------------------------------------------------------
+module print_part() {
+    if (PART == "lidar_run")     deck_run(lidar_len, lidar_fade);
+    if (PART == "deck_run")      deck_run(deck_len);
+    if (PART == "bar_run_entry") bar_run(entry_len, mitre_start, mitre_end, entry_at);
+    if (PART == "bar_run_exit")  bar_run(exit_len, 0, 0, -1, 0, exit_T);
+    if (PART == "board_housing") board_housing();
+    if (PART == "edge_top")      edge_top();
+    // contact face (against the deck front) down on the bed
+    if (PART == "edge_drop")     rotate([0, -90, 0]) edge_drop();
+}
+
+// ------------------------------------------------------------
+//  Preview scenes
+// ------------------------------------------------------------
+module mock_board() {
+    color("#2f8f4e") translate([5, wall + 1, 1]) cube([40, 1.6, 16]);       // PCB on edge
+    color("#eeeeee") translate([0, wall + 2.6, 4]) cube([7, 5, 9]);          // JST
+    color("#444444") translate([45, wall + 1.5, 5]) cube([30, 6.5, 9]);      // USB-C plug
+}
+
 module preview() {
-    hs_L = hs_pocket_len + 2 * hs_taper;
-    // deck (top at z=0, front face at x=0)
-    color("#2e2e2e") translate([-400, -150, -6]) cube([400, 300, 6]);
-    color("#2e2e2e") translate([-6, -150, -70]) cube([6, 300, 64]);
-    // the bar (mast base housing) — occupies y<0
-    color("#1c1c1c") translate([-300, -90, 0]) cube([260, 90, 60]);
-    color("#1c1c1c") translate([-200, -70, 0]) cube([60, 60, 300]);
-    // lidar on its mount (stand-in)
-    color("#151515") translate([-260, 110, 0]) {
+    hs_L = pocket_len + 2 * hs_taper;
+    bx0 = -330;                       // bar start
+    bx1 = bx0 + entry_len + hs_L + exit_len;
+    // deck and robot
+    color("#2a2a2a") translate([-420, -150, -6]) cube([420, 320, 6]);
+    color("#2a2a2a") translate([-6, -150, -70]) cube([6, 320, 64]);
+    color("#161616") translate([bx0, -90, 0]) cube([bx1 - bx0, 90, 70]);
+    color("#161616") translate([-280, -75, 0]) cube([70, 60, 320]);
+    color("#121212") translate([bx0 + entry_at, 120, 0]) {
         translate([-40, -40, 0]) cube([80, 80, 3]);
         translate([-28, -28, 3]) cube([56, 56, 22]);
         translate([0, 0, 25]) cylinder(d = 56, h = 20);
     }
-    W = wedge_w(bar_H, bar_flat);
-    color("#5a5a5a") {
-        // lidar -> side entry of the bar raceway
-        translate([-260, 110 - 40, 0]) rotate([0, 0, -90]) raceway(110 - 40 - W, true, false);
-        translate([-300, 0, 0]) bar_raceway(70, 0, 0, 40);
-        translate([-230, 0, 0]) bar_housing();
-        translate([-230 + hs_L, 0, 0]) bar_raceway(-40 - (-230 + hs_L), 0, 0, -1);
-        translate([0, bar_back + bch_w/2, 0]) edge_wrap();
+    color("#3b3b3b") {
+        stub_end = bar_W + stub_len;
+        translate([bx0 + entry_at, 80, 0]) rotate([0, 0, -90]) deck_run(80 - stub_end, lidar_fade);
+        translate([bx0, 0, 0]) bar_run(entry_len, 0, 0, entry_at);
+        translate([bx0 + entry_len, 0, 0]) board_housing();
+        translate([bx0 + entry_len + hs_L, 0, 0]) bar_run(exit_len, 0, 0, -1, 0, exit_T);
+        gap = -edge_run - (bx1 + exit_T);
+        translate([bx1 + exit_T, cy, 0]) deck_run(gap);
+        translate([0, cy, 0]) { edge_top(); edge_drop(); }
     }
 }
-// Hub seen from underneath, to show the inside
-module hub_underside() { rotate([180, 0, 0]) hub(); }
 
-if (PART == "hub")     hub_print();
-if (PART == "raceway") raceway_print();
-if (PART == "edge")    edge_print();
-if (PART == "bar_raceway") bar_raceway_print();
-if (PART == "bar_housing") bar_housing_print();
-if (PART == "preview") preview();
-if (PART == "hub_underside") hub_underside();
+module cutaway() {
+    difference() {
+        color("#3b3b3b") board_housing();
+        translate([-1, -1, 10]) cube([200, 60, 40]);   // slice the top off
+    }
+    translate([hs_taper + 3, 0, 0]) mock_board();
+    color("#111") translate([-5, cy - 2.2, 2]) rotate([0, 90, 0]) cylinder(d = 3.5, h = hs_taper + 8);
+    color("#111") translate([hs_taper + 78, cy + 2, 2]) rotate([0, 90, 0]) cylinder(d = 4, h = hs_taper + 15);
+}
+
+if (PART == "preview")      preview();
+else if (PART == "cutaway") cutaway();
+else print_part();
