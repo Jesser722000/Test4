@@ -138,16 +138,16 @@ module plate2d_side() {
     x0 = entry_at - pw/2;
     difference() {
         union() {
-            translate([x0, 0]) square([L + hs_W - x0, py]);
-            translate([x0, 0]) square([pw, bar_W + stub_len]);
+            translate([x0, wall + plate_clr]) square([L + hs_W - x0, py - wall - plate_clr]);
+            translate([x0, wall + plate_clr]) square([pw, bar_W + stub_len - wall - plate_clr]);
         }
         translate([L, 0]) rotate(-45) translate([0, -150]) square(300);
     }
 }
 module plate2d_housing() difference() {
     union() {
-        translate([-hs_W, 0]) square([pocket_x1 + plate_lip + hs_W, py]);
-        translate([exit_at - pw/2, 0]) square([pw, stub_out]);
+        translate([-hs_W, wall + plate_clr]) square([pocket_x1 + plate_lip + hs_W, py - wall - plate_clr]);
+        translate([exit_at - pw/2, wall + plate_clr]) square([pw, stub_out - wall - plate_clr]);
     }
     rotate(45) translate([-300, -150]) square(300);
 }
@@ -207,8 +207,6 @@ module front_housing() {
         stub_void(exit_at, stub_out);
         // tape pockets
         translate([pocket_x0, -eps, 2]) cube([pocket_x1 - pocket_x0, tape_rec + eps, hs_H - 8]);
-        translate([2, wall + pocket_d + plate_lip + 1, -eps])
-            cube([exit_at - ch_w/2 - dome_a - 2, hs_W - wall - pocket_d - plate_lip - 3.5, tape_rec + eps]);
         corner_pin_holes_housing();
         plate_recess() plate2d_housing();
     }
@@ -228,7 +226,6 @@ module dome_run(len, fade = 0) {
             translate([fade, 0, 0]) dbar(len - fade);
         }
         translate([-1, -ch_w/2, -eps]) cube([len + 2, ch_w, ch_h + eps]);
-        dome_tape(fade + 2, len - 2);
         if (fade == 0) dome_pins(0);
         dome_pins(len);
         plate_recess() plate2d_dome(len);
@@ -244,7 +241,6 @@ module edge_top() {
         translate([-edge_run, 0, 0]) dbar(edge_run + dome_b);
         beyond_mitre();
         translate([-edge_run - 1, -ch_w/2, -eps]) cube([edge_run + 1 + ch_h, ch_w, ch_h + eps]);
-        dome_tape(-edge_run + 2, -2);
         dome_pins(-edge_run);
         elbow_pins();
         plate_recess() plate2d_edge_top();

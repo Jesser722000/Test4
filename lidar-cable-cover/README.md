@@ -29,6 +29,29 @@ This is the same route as v4: from the lidar, around the column ("neck"), across
 ## Cable channel
 The channel is 9 mm wide by 5 mm high once the floor is in, which fits the lidar cable and the USB-C cable side by side. The covers are a bit taller than in v4 to make room for the floor: the strips are 13 mm tall, the domes 9.5 mm and the housing 35 mm.
 
+## Ready to print: Creality K2 Plus / K2 Pro, black PLA
+Everything is in [`print/`](print/):
+
+| File | Use it for |
+|---|---|
+| `lidar_cable_cover_K2_blackPLA.gcode` | **Print this.** All 7 parts on one plate. About **2 h 35 min** and **88 g** of black PLA. |
+| `lidar_cable_cover_K2_plate.3mf` | The same plate laid out, to open in Creality Print and re-slice with its own K2 profile if you prefer. |
+| `creality_k2_black_pla.ini` | The PrusaSlicer settings used |
+| `render_plate.png` | Picture of the plate layout |
+
+![plate](print/render_plate.png)
+
+**Settings:**
+- 0.4 mm nozzle, 0.2 mm layers, 3 walls, 20 % gyroid infill, no supports.
+- Nozzle 225 °C on the first layer, then 220 °C. Bed 60 °C. Fan 100 %.
+- 4 mm brim with a 0.15 mm gap, so it peels off cleanly.
+- The G-code starts with the K2's own `START_PRINT` (heating and auto-levelling) and ends with `END_PRINT`.
+- Everything fits within 15–278 × 15–252 mm, so it runs on both the K2 Pro (300 mm bed) and the K2 Plus (350 mm bed).
+
+**How to start it:** open the `.gcode` in Creality Print and send it to the printer over Wi-Fi, or copy it to a USB stick and pick it on the printer's screen. If you print from the CFS, load the black PLA in any slot and choose that slot when you start the job.
+
+The slicer reports short bridges inside the channels, the board pocket and the dowel holes. These are 9 mm or less, print fine at full fan, and are hidden once assembled.
+
 ## Printing
 - Every STL is already oriented for printing and needs **no supports**.
 - Matte black PLA or PETG. Use 0.16–0.2 mm layers, 3 walls and 20 % infill.
