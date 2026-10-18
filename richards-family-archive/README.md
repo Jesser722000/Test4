@@ -9,7 +9,7 @@ A private website where the family can browse the Richards photos and home movie
 - **Search** covers names, places, events and years.
 - **On iPhone** the home page is one long collage. A dock at the bottom jumps between decades.
 
-Everything in `site/` right now is **sample imagery**: prints cut from the design mockups and a short film made from them. Replace it with the real scans using the steps below.
+Everything in `site/` right now is **test content**: placeholder photos and a short placeholder film. Replace it with the real scans using the steps below.
 
 ## Look at it on your computer
 
@@ -123,7 +123,3 @@ Colours and fonts are set at the top of `styles.css`. On desktop, the home table
 - If someone has turned on "reduce motion", the site keeps its animations short.
 
 Works in current Safari (iOS 15 and later), Chrome, Edge and Firefox.
-
-## About the sample content
-
-The sample prints were cut from the design mockups and upscaled with Real-ESRGAN. The sample film was built from those stills with a made-up projector soundtrack. The scripts that made them are kept in `tools/`: `cut_prints.py`, `export_photos.py` and `make_film.py`. They need the mockup images and are not needed for real photos.

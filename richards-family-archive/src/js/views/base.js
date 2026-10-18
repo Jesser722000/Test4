@@ -67,8 +67,10 @@ export class View {
   /** Scale around the middle of the screen, wherever the page is scrolled. */
   origin() {
     if (this.fixed) return;
-    const top = this.el.classList.contains('is-leaving') ? -parseFloat(this.el.style.top || 0) : window.scrollY - (this.el.offsetTop || 0);
-    this.el.style.transformOrigin = `50% ${top + innerHeight / 2}px`;
+    // A page in the flow starts at the top of the stage, so the scroll offset the router set is enough.
+    // (Reading window.scrollY here would force a layout in the middle of the transition.)
+    const top = this.el.classList.contains('is-leaving') ? -parseFloat(this.el.style.top || 0) : this.app.scrollTop ?? window.scrollY;
+    this.el.style.transformOrigin = `50% ${top + (this.app.viewH ?? innerHeight) / 2}px`;
   }
 
   /** Pin the page where it is so the next one can take over the scroll position. */
@@ -113,11 +115,14 @@ export class View {
   }
 }
 
-/** Show a print at once, skipping its scroll-in animation (it is about to be flown to). */
+/**
+ * Show a print at once, skipping its scroll-in animation (it is about to be flown to).
+ * The no-transition class lands in the same style change as is-in and is lifted two frames later,
+ * so there is no need to force a layout here; callers measure all their prints in one go afterwards.
+ */
 export function revealNow(node) {
   if (!node.classList.contains('rv') || node.classList.contains('is-in')) return;
   node.classList.add('is-in', 'no-tr');
-  void node.offsetWidth;
   requestAnimationFrame(() => requestAnimationFrame(() => node.classList.remove('no-tr')));
 }
 

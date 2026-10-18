@@ -9,8 +9,10 @@ import * as store from '../store.js';
 const smooth = (t) => t * t * (3 - 2 * t);
 
 /**
- * Scroll-spy shared by the phone pages: each section gets a focus value --f (0..1) by how
- * close it is to the middle of the screen, and the dock follows the most focused one.
+ * Scroll-spy shared by the phone pages: each section gets a focus value (0..1) by how close it
+ * is to the middle of the screen, and the dock follows the most focused one. A section's
+ * apply(f) styles the few elements that react to it; writing them directly rather than through
+ * an inherited CSS variable keeps scrolling from restyling every print in the section.
  */
 function spy(view, sections, dock) {
   let raf = 0;
@@ -20,11 +22,13 @@ function spy(view, sections, dock) {
     if (!view.alive) return;
     const vh = innerHeight;
     let best = -1, bestF = -1;
+    const rects = sections.map((s) => s.node.getBoundingClientRect());
     sections.forEach((s, i) => {
-      const r = s.node.getBoundingClientRect();
+      const r = rects[i];
       const c = s.center ? r.top + r.height / 2 : r.top + Math.min(r.height, vh) * 0.42;
       const f = smooth(clamp(1 - Math.abs(c - vh * 0.46) / (vh * (s.center ? 0.5 : 0.62)), 0, 1));
-      if (Math.abs((s.f ?? -1) - f) > 0.004) { s.f = f; s.node.style.setProperty('--f', f.toFixed(3)); }
+      // Sections far off screen keep their last value; there is nothing to see there.
+      if (s.apply && Math.abs((s.f ?? -1) - f) > 0.004 && r.bottom > -vh && r.top < vh * 2) { s.f = f; s.apply(f); }
       if (f > bestF) { bestF = f; best = i; }
     });
     if (lock) {
@@ -95,14 +99,27 @@ export class HomeMob extends View {
         keep(it.photo.id, p);
       }
       const n = store.photosInDecade(d).length;
+      const title = el('h2', { class: 'mob-decade-title' }, `${d}s`);
+      const rule = el('span', { class: 'gold-rule', 'aria-hidden': 'true' });
+      const name = el('a', { class: 'mob-decade-name', href: decadeHref(d) }, title, rule);
+      const link = el('a', { class: 'mob-decade-link', href: decadeHref(d), 'aria-label': `Open the ${d}s, ${plural(n, 'photo')}` }, plural(n, 'photo'), icon('arrowRight', 16));
+      const tag = el('p', { class: 'mob-tagline' }, store.tagline(d));
       const node = el('section', { class: 'mob-decade', id: `d-${d}`, 'aria-label': `The ${d}s` },
-        collage,
-        el('div', { class: 'mob-decade-head' },
-          el('a', { class: 'mob-decade-name', href: decadeHref(d) }, el('h2', { class: 'mob-decade-title' }, `${d}s`), el('span', { class: 'gold-rule', 'aria-hidden': 'true' })),
-          el('a', { class: 'mob-decade-link', href: decadeHref(d), 'aria-label': `Open the ${d}s, ${plural(n, 'photo')}` }, plural(n, 'photo'), icon('arrowRight', 16))),
-        el('p', { class: 'mob-tagline' }, store.tagline(d)));
+        collage, el('div', { class: 'mob-decade-head' }, name, link), tag);
       this.el.append(node);
-      return { node, value: d, center: true };
+      // In focus, the decade's name grows and slides to the middle under its photos.
+      const sec = { node, value: d, center: true, name };
+      sec.apply = (f) => {
+        const S = 0.56 + 0.44 * f;
+        const tx = f * (innerWidth / 2 - 22 - (S * sec.nameW) / 2);
+        name.style.transform = `translate3d(${tx.toFixed(1)}px, 0, 0) scale(${S.toFixed(4)})`;
+        title.style.opacity = (0.5 + 0.5 * f).toFixed(3);
+        rule.style.opacity = f.toFixed(3);
+        rule.style.transform = `scaleX(${f.toFixed(3)})`;
+        link.style.opacity = (0.4 + 0.6 * f).toFixed(3);
+        tag.style.opacity = (0.3 + 0.7 * f).toFixed(3);
+      };
+      return sec;
     });
     this.el.append(el('div', { class: 'mob-end' },
       el('span', { class: 'gold-rule', 'aria-hidden': 'true' }),
@@ -140,7 +157,11 @@ export class HomeMob extends View {
     this.reveal([...this.el.querySelectorAll('.mob-collage .print')]);
   }
 
-  afterScroll() { this.updateSpy(); this.parallax(); }
+  afterScroll() {
+    for (const s of this.sections) s.nameW = s.name.offsetWidth;
+    this.updateSpy();
+    this.parallax();
+  }
 
   topbar() { return { sample: true }; }
 

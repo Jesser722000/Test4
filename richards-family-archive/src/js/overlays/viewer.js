@@ -127,13 +127,10 @@ export class Viewer {
     const slide = el('div', { class: 'viewer-slide' }, card);
     const s = { photo, slide, card, flip, img, zoom, z: { s: 1, x: 0, y: 0 } };
     this.layout(s);
-    const thumb = new Image();
-    thumb.src = photo.thumb;
     img.src = photo.thumb;
     const hi = new Image();
-    hi.decoding = 'async';
-    hi.onload = () => { if (s.img.isConnected || this.cur === s) img.src = photo.src; };
     hi.src = photo.src;
+    hi.decode().then(() => { if (s.img.isConnected || this.cur === s) img.src = photo.src; }, () => {});
     return s;
   }
 

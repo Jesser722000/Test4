@@ -195,6 +195,7 @@ async function show(route, { first = false, instant = false } = {}) {
   if (app.search.isOpen) app.search.close({ quick: true });
 
   if (old) scrollMem.set(old.route.key, window.scrollY);
+  app.viewH = innerHeight;
   if (old) old.freeze();
 
   hudUsed = new Set();
@@ -214,6 +215,7 @@ async function show(route, { first = false, instant = false } = {}) {
 
   const y = (back || dir < 0) && scrollMem.has(route.key) ? scrollMem.get(route.key) : (v.initialScroll?.() ?? 0);
   window.scrollTo(0, y);
+  app.scrollTop = y;
   v.afterScroll?.();
   updateBar();
   document.title = titleFor(route);
@@ -224,17 +226,17 @@ async function show(route, { first = false, instant = false } = {}) {
     return;
   }
 
-  const pairs = [];
+  let pairs = [];
   if (!first && !reduceMotion()) {
+    // All writes, then all reads: the new page is laid out once, not once per print.
     const targets = v.shared();
     for (const [k, s] of sources) {
       const t = targets.get(k);
-      if (!t) continue;
-      revealNow(t);
-      const tg = geom(t);
-      if (!onScreen(tg, 0)) continue;
-      pairs.push({ k, s, t, tg });
+      if (t) pairs.push({ k, s, t });
     }
+    pairs.forEach((p) => revealNow(p.t));
+    pairs.forEach((p) => { p.tg = geom(p.t); });
+    pairs = pairs.filter((p) => onScreen(p.tg, 0));
   }
   pairs.sort((a, b) => a.tg.cy - b.tg.cy || a.tg.cx - b.tg.cx);
   const chosen = pairs.slice(0, 20);

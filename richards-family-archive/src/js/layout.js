@@ -45,7 +45,14 @@ export function pickDecade(d, max, exclude = []) {
   return picked.slice(0, max).sort((a, b) => a.year - b.year);
 }
 
+// Layouts depend only on the archive data, so each is worked out once and reused.
+let homeCache = null;
 export function homeLayout() {
+  if (!homeCache) homeCache = computeHome();
+  return homeCache;
+}
+
+function computeHome() {
   const rand = seeded('richards-home');
   const items = [];
   const labels = [];
@@ -181,8 +188,14 @@ export function clusterPrints(photos, rand) {
   return { prints: out, w, h };
 }
 
-/** Title in the top-left corner, then rows of year clusters: 3 beside the title, then 3, 4, 3, 4... */
+const decadeCache = new Map();
 export function decadeLayout(decade) {
+  if (!decadeCache.has(decade)) decadeCache.set(decade, computeDecade(decade));
+  return decadeCache.get(decade);
+}
+
+/** Title in the top-left corner, then rows of year clusters: 3 beside the title, then 3, 4, 3, 4... */
+function computeDecade(decade) {
   const rand = seeded(`decade-${decade}`);
   const years = store.yearsInDecade(decade);
   const rows = [];

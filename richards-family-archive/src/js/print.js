@@ -51,9 +51,8 @@ export function sharpen(node, w) {
   if (!img || !photo || img.dataset.size === 'l' || !needsLarge(w, photo)) return;
   img.dataset.size = 'l';
   const hi = new Image();
-  hi.decoding = 'async';
-  hi.onload = () => { img.src = photo.src; };
   hi.src = photo.src;
+  hi.decode().then(() => { img.src = photo.src; }, () => { img.src = photo.src; });
 }
 
 export function setPrintBox(node, { w, h, x, y, r }) {
