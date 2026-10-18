@@ -2,6 +2,7 @@ import { View, yearHref, eventHref } from './base.js';
 import { el, icon, fmtTime, clamp } from '../util.js';
 import { tick, EASE, SPRING } from '../anim.js';
 import { makePrint, attachTip, sharpen } from '../print.js';
+import { revealWords } from '../motion.js';
 import * as store from '../store.js';
 
 /** Parse WebVTT text into cues. */
@@ -55,7 +56,7 @@ export class MovieView extends View {
     this.gate = el('div', { class: 'gate', dataset: { mid: m.id } }, v, this.poster,
       el('div', { class: 'fx fx-vignette', 'aria-hidden': 'true' }), el('div', { class: 'fx fx-flicker', 'aria-hidden': 'true' }),
       this.cc, this.bigPlay, this.controls);
-    const holes = (side) => el('span', { class: `holes ${side}`, 'aria-hidden': 'true' }, Array.from({ length: 6 }, () => el('i')));
+    const holes = (side) => el('span', { class: `holes ${side}`, 'aria-hidden': 'true' });
     this.film = el('div', { class: 'film' }, holes('l'), this.gate, holes('r'));
 
     // Side panel
@@ -335,6 +336,7 @@ export class MovieView extends View {
   }
 
   enter(ctx) {
+    revealWords(this.side.querySelector('h1'), { delay: 260, stagger: 80, duration: 1150 });
     if (ctx.dir !== 1) return super.enter(ctx);
     const anims = [];
     const flyingFilm = ctx.flying.has(`m:${this.m.id}`);
@@ -344,7 +346,7 @@ export class MovieView extends View {
     if (!flyingFilm) anims.push(this.anim(this.gate, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], { duration: 900, easing: SPRING, fill: 'backwards' }));
     anims.push(this.anim(this.controls, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 700, delay: 600, easing: EASE, fill: 'backwards' }));
     anims.push(this.anim(this.bigPlay, [{ opacity: 0, transform: 'scale(0.7)' }, { opacity: 1, transform: 'none' }], { duration: 800, delay: 650, easing: SPRING, fill: 'backwards' }));
-    [...this.side.children].forEach((c, i) => anims.push(this.anim(c, [{ opacity: 0, transform: 'translateX(24px)' }, { opacity: 1, transform: 'none' }], { duration: 900, delay: 220 + i * 70, easing: EASE, fill: 'backwards' })));
+    [...this.side.children].filter((c) => c.tagName !== 'H1').forEach((c, i) => anims.push(this.anim(c, [{ opacity: 0, transform: 'translateX(24px)' }, { opacity: 1, transform: 'none' }], { duration: 900, delay: 220 + i * 70, easing: EASE, fill: 'backwards' })));
     const strip = this.el.querySelector('.mv-strip header');
     if (strip) anims.push(this.anim(strip, [{ opacity: 0 }, { opacity: 1 }], { duration: 700, delay: 500, fill: 'backwards' }));
     for (const [id, n] of this.prints) {

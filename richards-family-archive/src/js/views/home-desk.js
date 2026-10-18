@@ -111,6 +111,7 @@ export class HomeDesk extends View {
     this.timeline.preview(null);
   }
 
+  /** The three layers lean with the pointer by different amounts (their slow idle drift is pure CSS). */
   parallax() {
     const fx = new Follow(0, 0.35), fy = new Follow(0, 0.35);
     let running = false;
@@ -138,11 +139,15 @@ export class HomeDesk extends View {
     this.focused = decade;
     this.focusedYear = year;
     for (const [d, list] of this.byDecade) {
-      for (const p of list) {
+      // The picked decade's prints lift one after another, left to right, like a wave.
+      const order = [...list].sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
+      order.forEach((p, i) => {
         const inDecade = decade != null && d === decade;
         p.classList.toggle('is-dim', decade != null && !inDecade);
         p.classList.toggle('is-focus', inDecade && year != null && store.photo(p.dataset.pid)?.year === year);
-      }
+        p.style.setProperty('--wd', `${inDecade ? i * 22 : 0}ms`);
+        p.classList.toggle('is-lift', inDecade);
+      });
     }
     for (const l of this.labels) {
       l.classList.toggle('is-dim', decade != null && +l.dataset.decade !== decade);

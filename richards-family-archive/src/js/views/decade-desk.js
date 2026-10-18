@@ -6,6 +6,7 @@ import { decadeLayout, ghostLayout } from '../layout.js';
 import { Camera } from '../camera.js';
 import { drag } from '../gesture.js';
 import { Pillbar, Zoomer } from '../hud.js';
+import { revealWords, countUp } from '../motion.js';
 import * as store from '../store.js';
 
 /** Desktop decade: a table you can drag and zoom, one cluster of prints per year. */
@@ -216,7 +217,16 @@ export class DecadeDesk extends View {
     return false;
   }
 
+  textIn() {
+    const [h1, tag, stats] = this.titleEl.children;
+    revealWords(h1, { delay: 150, stagger: 90, duration: 1200 });
+    revealWords(tag, { delay: 420, stagger: 40, duration: 1000 });
+    this.anim(stats, [{ opacity: 0 }, { opacity: 1 }], { duration: 800, delay: 700, fill: 'backwards' });
+    countUp(stats, { delay: 700 });
+  }
+
   enter(ctx) {
+    this.textIn();
     if (ctx.dir === 2 || ctx.dir === -2 || ctx.dir === 0) return super.enter(ctx);
     // Zooming in from the home table or back out of a year: everything not in flight settles in.
     const anims = [];
@@ -232,7 +242,6 @@ export class DecadeDesk extends View {
     for (const c of this.clusters.values()) {
       anims.push(this.anim(c.node.querySelector('.cluster-year'), [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 800, delay: 350 + Math.random() * 200, easing: EASE, fill: 'backwards' }));
     }
-    anims.push(this.anim(this.titleEl, [{ opacity: 0, transform: 'translateY(30px)' }, { opacity: 1, transform: 'none' }], { duration: 1000, delay: 160, easing: EASE, fill: 'backwards' }));
     this.ghosts.forEach((g) => anims.push(this.anim(g, [{ opacity: 0 }, { opacity: 1 }], { duration: 1200, delay: 500, fill: 'backwards' })));
     return Promise.all(anims.map((a) => a.finished.catch(() => {})));
   }

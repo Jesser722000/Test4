@@ -2,6 +2,7 @@ import { el, icon, clamp, isPhone, reduceMotion } from '../util.js';
 import { animate, fly, geom, onScreen, EASE, SPRING, settle } from '../anim.js';
 import { drag } from '../gesture.js';
 import { yearHref, eventHref } from '../views/base.js';
+import { resetTilt, burst } from '../motion.js';
 import * as store from '../store.js';
 
 /**
@@ -22,6 +23,7 @@ export class Viewer {
     this.isOpen = true;
     this.closing = false;
     this.prevFocus = document.activeElement;
+    resetTilt();
     this.build();
     this.app.overlays.append(this.node);
     this.app.lockScroll('viewer', true);
@@ -31,6 +33,7 @@ export class Viewer {
     this.cur = this.slide(photo);
     this.track.append(this.cur.slide);
     this.fill(photo, true);
+    this.glowTo(photo);
 
     const from = origin && geom(origin);
     const to = geom(this.cur.card);
@@ -56,6 +59,7 @@ export class Viewer {
 
   build() {
     this.bg = el('div', { class: 'viewer-bg' });
+    this.glow = el('div', { class: 'viewer-glow', 'aria-hidden': 'true' });
     this.track = el('div', { class: 'viewer-track' });
     this.prevBtn = el('button', { class: 'viewer-nav prev', type: 'button', 'aria-label': 'Previous photo' }, icon('chevLeft', 26));
     this.nextBtn = el('button', { class: 'viewer-nav next', type: 'button', 'aria-label': 'Next photo' }, icon('chevRight', 26));
@@ -75,9 +79,9 @@ export class Viewer {
       el('div', { class: 'vi-row' }, this.favBtn, this.flipBtn),
       el('div', { class: 'vi-row' }, this.yearLink, this.eventLink),
       this.note);
-    this.info = el('aside', { class: 'viewer-info' }, this.infoBody, this.count);
+    this.info = el('aside', { class: 'viewer-info', 'data-lenis-prevent': '' }, this.infoBody, this.count);
     this.node = el('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'viewer-title' },
-      this.bg, this.stage, this.info, this.closeBtn, this.dots);
+      this.bg, this.glow, this.stage, this.info, this.closeBtn, this.dots);
 
     this.prevBtn.addEventListener('click', () => this.go(-1));
     this.nextBtn.addEventListener('click', () => this.go(1));
@@ -90,6 +94,7 @@ export class Viewer {
     this.favBtn.addEventListener('click', () => {
       const on = store.toggleFav(this.photo.id);
       this.paintFav();
+      if (on) burst(this.favBtn.querySelector('svg'));
       animate(this.favBtn.querySelector('svg'), [{ transform: 'scale(1)' }, { transform: 'scale(1.45)' }, { transform: 'scale(1)' }], { duration: 460, easing: EASE });
       this.app.toast(on ? 'Saved to favorites' : 'Removed from favorites');
     });
@@ -230,7 +235,20 @@ export class Viewer {
       { transform: 'none', opacity: 1 },
     ], { duration: reduce ? 120 : 760, easing: SPRING });
     this.fill(this.photo);
+    this.glowTo(this.photo);
     this.preload();
+  }
+
+  /** The photo's own colours, blurred, glow behind it; they cross-fade as the photo changes. */
+  glowTo(photo) {
+    const img = el('img', { alt: '', src: photo.lqip || photo.thumb, decoding: 'async' });
+    this.glow.append(img);
+    requestAnimationFrame(() => img.classList.add('is-on'));
+    const old = [...this.glow.children].filter((n) => n !== img);
+    old.forEach((n) => {
+      n.classList.remove('is-on');
+      setTimeout(() => n.remove(), 1100);
+    });
   }
 
   flip() {

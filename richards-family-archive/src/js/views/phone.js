@@ -1,9 +1,10 @@
 import { View, yearHref, decadeHref, filmCard } from './base.js';
-import { el, icon, clamp, plural, seeded, reduceMotion } from '../util.js';
+import { el, icon, clamp, plural, seeded } from '../util.js';
 import { SPRING, EASE } from '../anim.js';
 import { makePrint } from '../print.js';
 import { heroLayout, streamLayout, yearCollage, pickDecade, heroIds } from '../layout.js';
 import { Dock, hudIn } from '../hud.js';
+import { revealWords, countUp } from '../motion.js';
 import * as store from '../store.js';
 
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -45,8 +46,8 @@ function spy(view, sections, dock) {
     const s = sections[i];
     const r = s.node.getBoundingClientRect();
     const y = Math.max(0, r.top + window.scrollY - (s.center ? innerHeight * 0.46 - r.height / 2 : s.offset ?? 76));
-    lock = { y, until: performance.now() + 1400 };
-    window.scrollTo({ top: y, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    lock = { y, until: performance.now() + 1600 };
+    view.app.scrollTo(y, { smooth: true });
   };
   return update;
 }
@@ -253,6 +254,14 @@ export class DecadeMob extends View {
     }));
     this.updateSpy = spy(this, this.sections, this.dock);
     this.reveal([...this.el.querySelectorAll('.dm-collage .print, .film-card')]);
+  }
+
+  enter(ctx) {
+    const [h1, tag, stats] = this.head.children;
+    revealWords(h1, { delay: 120, stagger: 90, duration: 1150 });
+    revealWords(tag, { delay: 380, stagger: 40, duration: 1000 });
+    countUp(stats, { delay: 600 });
+    return super.enter(ctx);
   }
 
   /** Arriving from one of this decade's years, start with that year in view. */

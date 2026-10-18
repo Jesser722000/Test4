@@ -2,6 +2,7 @@ import { YearView } from './year.js';
 import { filmCard, decadeHref } from './base.js';
 import { el, icon, plural, seeded } from '../util.js';
 import { makePrint, attachTip } from '../print.js';
+import { revealWords, countUp } from '../motion.js';
 import * as store from '../store.js';
 
 /** The photos and films this browser has hearted. */
@@ -76,6 +77,13 @@ export class FavoritesView extends YearView {
     // Un-hearting from the viewer takes the photo off this page once the viewer closes.
     this.later(store.onFavChange(() => { this.dirty = true; }));
   }
+
+  textIn() {
+    revealWords(this.el.querySelector('.yv-head h1'), { delay: 120 });
+    this.el.querySelectorAll('.yv-stats span').forEach((s, i) => countUp(s, { delay: 250 + i * 120 }));
+  }
+
+  headingsRise() {}
 
   onViewerClosed() {
     if (this.dirty) { this.dirty = false; this.app.rerender(); }

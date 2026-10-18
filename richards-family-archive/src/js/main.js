@@ -12,6 +12,8 @@ import { MovieView } from './views/movie.js';
 import { FavoritesView } from './views/favorites.js';
 import { Viewer } from './overlays/viewer.js';
 import { Search } from './overlays/search.js';
+import { initSmoothScroll, setSmooth, scrollToY } from './scroll.js';
+import { initTilt, initMagnetic, resetTilt } from './motion.js';
 import * as store from './store.js';
 
 const app = {
@@ -164,6 +166,7 @@ async function show(route, { first = false, instant = false } = {}) {
   settleTransition();
   closeMenu();
   hideTip();
+  resetTilt();
   const old = app.view;
   const back = track(route.key);
 
@@ -214,7 +217,8 @@ async function show(route, { first = false, instant = false } = {}) {
   app.el.dataset.view = route.name;
 
   const y = (back || dir < 0) && scrollMem.has(route.key) ? scrollMem.get(route.key) : (v.initialScroll?.() ?? 0);
-  window.scrollTo(0, y);
+  setSmooth(!v.fixed && locks.size === 0);
+  scrollToY(y);
   app.scrollTop = y;
   v.afterScroll?.();
   updateBar();
@@ -291,8 +295,8 @@ function openPending(v) {
   if (!n || i < 0) return;
   const r = n.getBoundingClientRect();
   const visible = r.top > 80 && r.bottom < innerHeight - 90;
-  if (!visible) window.scrollTo({ top: window.scrollY + r.top - innerHeight / 2 + r.height / 2, behavior: reduceMotion() ? 'auto' : 'smooth' });
-  setTimeout(() => { if (app.view === v) { revealNow(n); app.viewer.open(list, i, n); } }, visible ? 120 : 650);
+  const arrive = visible ? wait(120) : scrollToY(window.scrollY + r.top - innerHeight / 2 + r.height / 2, { smooth: true });
+  arrive.then(() => { if (app.view === v) { revealNow(n); app.viewer.open(list, i, n); } });
 }
 
 /* ---------- App API used by the pages ---------- */
@@ -332,6 +336,7 @@ app.up = () => {
 };
 
 app.rerender = () => { if (app.route) show(app.route, { instant: true }); };
+app.scrollTo = scrollToY;
 app.openViewer = (list, index, origin) => app.viewer.open(list, index, origin);
 app.viewerClosed = () => app.view?.onViewerClosed?.();
 app.openSearch = () => { closeMenu(); app.search.open(); };
@@ -351,6 +356,7 @@ const locks = new Set();
 app.lockScroll = (owner, on) => {
   if (on) locks.add(owner); else locks.delete(owner);
   document.documentElement.classList.toggle('is-locked', locks.size > 0);
+  setSmooth(locks.size === 0 && !app.view?.fixed);
 };
 
 app.toggleFullscreen = () => {
@@ -361,6 +367,9 @@ app.toggleFullscreen = () => {
 /* ---------- Boot ---------- */
 function boot() {
   try { history.scrollRestoration = 'manual'; } catch { /* ignore */ }
+  initSmoothScroll();
+  initTilt();
+  initMagnetic();
   app.hud = el('div', { class: 'hud', id: 'hud' });
   app.stage.after(app.hud);
   app.viewer = new Viewer(app);

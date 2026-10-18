@@ -106,6 +106,27 @@ A movie entry has these fields:
 
 Colours and fonts are set at the top of `styles.css`. On desktop, the home table has a place for each decade from the 1940s to the 2020s. To add another decade, such as earlier Arant family photos, add an entry to `ZONES` in `src/js/layout.js`. Decade pages, year pages and search work for any year without changes.
 
+### Motion
+
+Most of the movement lives in three places:
+
+- `src/js/motion.js` holds the effects:
+  - prints tilt toward the pointer with light moving across the paper
+  - round buttons lean toward the pointer
+  - saving a photo sends up a burst of hearts
+  - headings rise in word by word
+  - year numbers roll like an odometer
+  - counts tick up
+- `src/js/scroll.js` smooths mouse-wheel scrolling on desktop with [Lenis](https://github.com/darkroomengineering/lenis). Phones keep their own scrolling.
+- The "Motion" section of `styles.css` covers the rest:
+  - prints are dealt in as they scroll into view
+  - photos drift inside their frames as the page scrolls (desktop, in browsers with CSS scroll-driven animations)
+  - the home table slowly breathes
+  - film sprockets run while a movie plays
+  - the open photo's colours glow behind it
+
+Everything is calmed down for anyone who has turned on "reduce motion".
+
 ## Using the site
 
 | | |

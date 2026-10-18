@@ -1,9 +1,10 @@
 import { View, yearHref, filmCard } from './base.js';
-import { el, icon, plural, seeded, isPhone, clamp, reduceMotion } from '../util.js';
+import { el, icon, plural, seeded, isPhone, clamp } from '../util.js';
 import { SPRING } from '../anim.js';
 import { makePrint, attachTip, setPrintBox } from '../print.js';
 import { justify } from '../layout.js';
 import { Pillbar } from '../hud.js';
+import { splitWords, revealWords, rollNumber, countUp } from '../motion.js';
 import * as store from '../store.js';
 
 /** A year: its events in order, each a justified spread of prints, home movies first. */
@@ -20,8 +21,8 @@ export class YearView extends View {
     this.el.append(el('header', { class: 'yv-head' },
       el('div', null,
         el('p', { class: 'eyebrow yv-eyebrow' }, el('a', { href: `#/${d}s` }, `The ${d}s`)),
-        el('h1', null, String(y)),
-        el('p', null, store.yearSummary(y))),
+        (this.yearEl = el('h1', { class: 'yv-year' }, String(y))),
+        (this.summaryEl = el('p', null, store.yearSummary(y)))),
       el('div', { class: 'yv-stats' },
         el('span', null, plural(photos.length, 'photo')),
         movies.length ? el('span', null, plural(movies.length, 'home movie')) : null,
@@ -93,6 +94,36 @@ export class YearView extends View {
       return ph && { kicker: ph.date, title: ph.title };
     }));
     this.reveal([...this.el.querySelectorAll('.yv-grid .print, .yv-grid .film-card')]);
+    this.headingsRise();
+  }
+
+  /** Event titles wait just below the line and rise word by word when they scroll into view. */
+  headingsRise() {
+    const hs = [...this.el.querySelectorAll('.yv-event-head h2')];
+    if (!hs.length) return;
+    hs.forEach((h) => { splitWords(h); h.classList.add('is-pre'); });
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        io.unobserve(e.target);
+        e.target.classList.remove('is-pre');
+        revealWords(e.target, { stagger: 60, duration: 1000 });
+      }
+    }, { rootMargin: '0px 0px -8% 0px' });
+    hs.forEach((h) => io.observe(h));
+    this.later(() => io.disconnect());
+  }
+
+  /** The year rolls over from where you came from (1970 when arriving from the decade), the rest rises in. */
+  textIn() {
+    const y = this.route.year;
+    const from = this.app.from;
+    let start = store.decadeOf(y);
+    if (from?.name === 'year' && from.year !== y) start = from.year;
+    else if (from?.name === 'movie' && from.year === y) start = y;
+    rollNumber(this.yearEl, y, start, { delay: 140 });
+    revealWords(this.summaryEl, { delay: 280, stagger: 45, duration: 1000 });
+    this.el.querySelectorAll('.yv-stats span').forEach((s, i) => countUp(s, { delay: 250 + i * 120 }));
   }
 
   layout() {
@@ -138,8 +169,7 @@ export class YearView extends View {
   update(route) {
     if (route.year !== this.route.year) return false;
     this.route = route;
-    const top = this.initialScroll();
-    window.scrollTo({ top, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    this.app.scrollTo(this.initialScroll(), { smooth: true });
     return true;
   }
 
@@ -150,12 +180,13 @@ export class YearView extends View {
   }
 
   enter(ctx) {
+    this.textIn(ctx);
     if (ctx.dir !== 1 && ctx.dir !== -1) return super.enter(ctx);
     // Into a year from its decade: the head rises, prints already on screen settle in around the ones in flight.
     const head = this.el.querySelector('.yv-head');
     const anims = [this.anim(head, [{ opacity: 0, transform: 'translateY(28px)' }, { opacity: 1, transform: 'none' }], { duration: 1000, delay: 140, easing: SPRING, fill: 'backwards' })];
-    for (const h of this.el.querySelectorAll('.yv-event-head')) {
-      anims.push(this.anim(h, [{ opacity: 0, transform: 'translateY(18px)' }, { opacity: 1, transform: 'none' }], { duration: 900, delay: 260, easing: SPRING, fill: 'backwards' }));
+    for (const h of this.el.querySelectorAll('.yv-event-head p, .yv-event-head .meta')) {
+      anims.push(this.anim(h, [{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }], { duration: 900, delay: 320, easing: SPRING, fill: 'backwards' }));
     }
     return Promise.all(anims.map((a) => a.finished.catch(() => {})));
   }

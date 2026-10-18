@@ -1,5 +1,6 @@
 import { el, icon, isPhone, plural } from './util.js';
 import { animate, EASE } from './anim.js';
+import { burst } from './motion.js';
 import * as store from './store.js';
 
 /* ---------- Top bar ---------- */
@@ -49,6 +50,7 @@ export function renderTopbar(app, cfg = {}) {
       heart.setAttribute('aria-label', now ? 'Remove from favorites' : 'Add to favorites');
       heart.replaceChildren(icon(now ? 'heartFill' : 'heart', 22));
       animate(heart, [{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 420 });
+      if (now) burst(heart);
       app.toast(now ? 'Saved to favorites' : 'Removed from favorites');
     });
     right.append(el('span', { class: 'tb-sep', 'aria-hidden': 'true' }), heart);

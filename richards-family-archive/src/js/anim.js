@@ -9,7 +9,7 @@ export const SPRING = (() => {
   try {
     if (!CSS.supports('animation-timing-function', 'linear(0, 1)')) return EASE;
   } catch { return EASE; }
-  const stiffness = 170, damping = 20, mass = 1, steps = 60, dur = 1;
+  const stiffness = 170, damping = 20, mass = 1, steps = 40, dur = 1;
   const w0 = Math.sqrt(stiffness / mass);
   const zeta = damping / (2 * Math.sqrt(stiffness * mass));
   const pts = [];

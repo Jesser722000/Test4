@@ -28,7 +28,7 @@ export class Search {
       el('div', { class: 'search-head' },
         el('label', { class: 'search-field' }, icon('search', 28, 1.4), this.input),
         this.closeBtn),
-      el('div', { class: 'search-body' }, this.results));
+      el('div', { class: 'search-body', 'data-lenis-prevent': '' }, this.results));
     this.app.overlays.append(this.node);
     this.app.lockScroll('search', true);
 
