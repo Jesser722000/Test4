@@ -94,9 +94,14 @@ export function attachTip(root, lookup, { above = false } = {}) {
   const move = () => { if (current) place(current); };
   function place(p) {
     const b = p.getBoundingClientRect();
+    // A hovered print is still growing when the tip appears, so leave room for its full size.
+    const s = parseFloat(p.style.getPropertyValue('--s')) || 1;
+    const grow = p.classList.contains('liftable') ? (p._grow ?? 0.16) : 0;
+    const half = ((b.height / s) * (1 + grow)) / 2;
+    const cy = b.top + b.height / 2;
     tipNode.style.left = `${Math.max(90, Math.min(innerWidth - 90, b.left + b.width / 2))}px`;
-    const below = Math.min(innerHeight - 70, b.bottom + 12);
-    tipNode.style.top = `${above ? Math.max(70, b.top - 12 - tipNode.offsetHeight) : below}px`;
+    const below = Math.min(innerHeight - 70, cy + half + 12);
+    tipNode.style.top = `${above ? Math.max(70, cy - half - 12 - tipNode.offsetHeight) : below}px`;
   }
   root.addEventListener('pointerover', over);
   root.addEventListener('pointerout', out);

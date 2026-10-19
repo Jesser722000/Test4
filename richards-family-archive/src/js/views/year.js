@@ -1,4 +1,4 @@
-import { View, yearHref, filmCard } from './base.js';
+import { View, yearHref, filmCard, playChip } from './base.js';
 import { el, icon, plural, seeded, isPhone, clamp } from '../util.js';
 import { SPRING } from '../anim.js';
 import { makePrint, attachTip, setPrintBox } from '../print.js';
@@ -22,7 +22,8 @@ export class YearView extends View {
       el('div', null,
         el('p', { class: 'eyebrow yv-eyebrow' }, el('a', { href: `#/${d}s` }, `The ${d}s`)),
         (this.yearEl = el('h1', { class: 'yv-year' }, String(y))),
-        (this.summaryEl = el('p', null, store.yearSummary(y)))),
+        (this.summaryEl = el('p', null, store.yearSummary(y))),
+        (this.playEl = photos.length > 1 ? playChip(`Play ${y}`, () => this.app.play(this.list, { title: String(y) })) : null)),
       el('div', { class: 'yv-stats' },
         el('span', null, plural(photos.length, 'photo')),
         movies.length ? el('span', null, plural(movies.length, 'home movie')) : null,
@@ -85,8 +86,7 @@ export class YearView extends View {
 
     this.on(this.el, 'click', (e) => {
       const p = e.target.closest('.print');
-      if (!p) return;
-      this.app.openViewer(this.list, this.list.findIndex((x) => x.id === p.dataset.pid), p);
+      if (p) this.app.openPhoto(p);
     });
     this.later(attachTip(this.el, (n) => {
       if (n.classList.contains('film-card')) return null;
@@ -123,6 +123,7 @@ export class YearView extends View {
     else if (from?.name === 'movie' && from.year === y) start = y;
     rollNumber(this.yearEl, y, start, { delay: 140 });
     revealWords(this.summaryEl, { delay: 280, stagger: 45, duration: 1000 });
+    if (this.playEl) this.anim(this.playEl, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 900, delay: 520, easing: SPRING, fill: 'backwards' });
     this.el.querySelectorAll('.yv-stats span').forEach((s, i) => countUp(s, { delay: 250 + i * 120 }));
   }
 
@@ -159,6 +160,9 @@ export class YearView extends View {
     for (const [id, n] of this.films) m.set(`m:${id}`, n);
     return m;
   }
+
+  photoList() { return this.list; }
+  printFor(id) { return this.prints.get(id) || null; }
 
   initialScroll() {
     if (!this.route.event) return 0;

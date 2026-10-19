@@ -90,6 +90,10 @@ export class MovieView extends View {
       row.append(n);
       this.prints.set(p.id, n);
     });
+    this.on(row, 'click', (e) => {
+      const p = e.target.closest('.print');
+      if (p) this.app.openPhoto(p);
+    });
     const strip = photos.length ? el('section', { class: 'mv-strip' },
       el('header', null, el('span', { class: 'eyebrow' }, 'Photos from this day'), el('span', { class: 'eyebrow' }, String(photos.length))),
       row) : null;
@@ -310,6 +314,10 @@ export class MovieView extends View {
     crumbs.push({ label: 'Home movie' });
     return { crumbs, crumbsCenter: true, fav: m.id, avatar: true };
   }
+
+  photoList() { return this.photos; }
+  printFor(id) { return this.prints.get(id) || null; }
+  pauseMedia() { this.video.pause(); }
 
   shared() {
     const m = new Map();

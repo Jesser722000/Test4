@@ -1,4 +1,4 @@
-import { View, yearHref, decadeHref, filmCard } from './base.js';
+import { View, yearHref, decadeHref, filmCard, playChip } from './base.js';
 import { el, icon, clamp, plural, seeded } from '../util.js';
 import { SPRING, EASE } from '../anim.js';
 import { makePrint } from '../print.js';
@@ -8,6 +8,23 @@ import { revealWords, countUp } from '../motion.js';
 import * as store from '../store.js';
 
 const smooth = (t) => t * t * (3 - 2 * t);
+
+// Android offers to install the site as an app; keep the offer for the button on the home page.
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; });
+
+/** How to keep the archive on the phone's Home Screen, unless it is already opened from there. */
+function installNote() {
+  if (navigator.standalone || matchMedia('(display-mode: standalone)').matches) return null;
+  if (installEvent) {
+    const b = el('button', { class: 'chip', type: 'button' }, icon('plus', 16), 'Add to Home Screen');
+    b.addEventListener('click', () => { installEvent?.prompt(); installEvent = null; b.remove(); });
+    return b;
+  }
+  const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!ios) return null;
+  return el('p', { class: 'mob-install' }, 'Keep it on your phone: tap ', icon('share', 17), ' then ', el('b', null, 'Add to Home Screen'), '.');
+}
 
 /**
  * Scroll-spy shared by the phone pages: each section gets a focus value (0..1) by how close it
@@ -105,8 +122,9 @@ export class HomeMob extends View {
       const name = el('a', { class: 'mob-decade-name', href: decadeHref(d) }, title, rule);
       const link = el('a', { class: 'mob-decade-link', href: decadeHref(d), 'aria-label': `Open the ${d}s, ${plural(n, 'photo')}` }, plural(n, 'photo'), icon('arrowRight', 16));
       const tag = el('p', { class: 'mob-tagline' }, store.tagline(d));
+      const play = playChip(`Play the ${d}s`, () => this.app.play(store.photosInDecade(d), { title: `the ${d}s`, years: true }));
       const node = el('section', { class: 'mob-decade', id: `d-${d}`, 'aria-label': `The ${d}s` },
-        collage, el('div', { class: 'mob-decade-head' }, name, link), tag);
+        collage, el('div', { class: 'mob-decade-head' }, name, link), tag, el('div', { class: 'mob-decade-play' }, play));
       this.el.append(node);
       // In focus, the decade's name grows and slides to the middle under its photos.
       const sec = { node, value: d, center: true, name };
@@ -119,6 +137,8 @@ export class HomeMob extends View {
         rule.style.transform = `scaleX(${f.toFixed(3)})`;
         link.style.opacity = (0.4 + 0.6 * f).toFixed(3);
         tag.style.opacity = (0.3 + 0.7 * f).toFixed(3);
+        // The Play button just switches on near the middle: one class change, not a restyle every frame.
+        if ((f > 0.45) !== !!sec.near) { sec.near = f > 0.45; play.classList.toggle('is-near', sec.near); }
       };
       return sec;
     });
@@ -127,7 +147,8 @@ export class HomeMob extends View {
       el('p', null, `${plural(store.allPhotos().length, 'photo')} so far. More are added as the albums are scanned.`),
       el('div', { class: 'mob-end-links' },
         el('button', { class: 'chip', type: 'button', onclick: () => this.app.surprise() }, icon('shuffle', 18), 'Surprise me'),
-        el('a', { class: 'chip', href: '#/favorites' }, icon('heart', 18), 'Favorites'))));
+        el('a', { class: 'chip', href: '#/favorites' }, icon('heart', 18), 'Favorites')),
+      installNote()));
 
     this.dock = this.app.useHud('dock', 'decades', () => new Dock({
       items: decs.map((d) => ({ value: d, label: String(d) })),
@@ -137,9 +158,7 @@ export class HomeMob extends View {
 
     this.on(this.el, 'click', (e) => {
       const p = e.target.closest('.print');
-      if (!p) return;
-      const list = store.allPhotos();
-      this.app.openViewer(list, list.findIndex((x) => x.id === p.dataset.pid), p);
+      if (p) this.app.openPhoto(p);
     });
 
     // Hero parallax: prints drift up at different speeds, the title sinks and fades.
@@ -165,6 +184,15 @@ export class HomeMob extends View {
   }
 
   topbar() { return { sample: true }; }
+
+  photoList() { return store.allPhotos().filter((p) => this.prints.has(p.id)); }
+
+  /** A photo in the hero and in its decade goes back to the copy on screen (or its decade's). */
+  printFor(id) {
+    const nodes = this.prints.get(id);
+    if (!nodes) return null;
+    return nodes.find((n) => { const r = n.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; }) || nodes[nodes.length - 1];
+  }
 
   /** A photo can be in the hero and in its decade; share whichever copy is on screen. */
   shared() {
@@ -215,13 +243,14 @@ export class DecadeMob extends View {
     this.head = el('header', { class: 'dm-head' },
       el('h1', null, `The ${d}s.`),
       el('p', null, store.tagline(d)),
-      el('p', { class: 'dm-stats' }, `${plural(nPhotos, 'photo')}${nMovies ? ` · ${plural(nMovies, 'home movie')}` : ''} · ${plural(years.length, 'year')}`));
+      el('p', { class: 'dm-stats' }, `${plural(nPhotos, 'photo')}${nMovies ? ` · ${plural(nMovies, 'home movie')}` : ''} · ${plural(years.length, 'year')}`),
+      playChip(`Play the ${d}s`, () => this.app.play(store.photosInDecade(d), { title: `the ${d}s`, years: true })));
     this.el.append(this.head);
 
     this.sections = years.map((y) => {
       const photos = store.featuredForYear(y, 3);
       const lay = yearCollage(photos, W);
-      const collage = el('a', { class: 'dm-collage', href: yearHref(y), style: { height: `${lay.h}px` }, 'aria-label': `Open ${y}` });
+      const collage = el('div', { class: 'dm-collage', style: { height: `${lay.h}px` } });
       for (const it of lay.items) {
         const p = makePrint(it.photo, { w: it.w, h: it.h, x: it.x + 12, y: it.y, r: it.r, lift: false });
         collage.append(p);
@@ -254,13 +283,18 @@ export class DecadeMob extends View {
     }));
     this.updateSpy = spy(this, this.sections, this.dock);
     this.reveal([...this.el.querySelectorAll('.dm-collage .print, .film-card')]);
+    this.on(this.el, 'click', (e) => {
+      const p = e.target.closest('.print');
+      if (p) this.app.openPhoto(p);
+    });
   }
 
   enter(ctx) {
-    const [h1, tag, stats] = this.head.children;
+    const [h1, tag, stats, play] = this.head.children;
     revealWords(h1, { delay: 120, stagger: 90, duration: 1150 });
     revealWords(tag, { delay: 380, stagger: 40, duration: 1000 });
     countUp(stats, { delay: 600 });
+    this.anim(play, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 900, delay: 700, easing: SPRING, fill: 'backwards' });
     return super.enter(ctx);
   }
 

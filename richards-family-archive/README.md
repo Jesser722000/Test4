@@ -5,9 +5,10 @@ A private website where the family can browse the Richards photos and home movie
 - **Home** lays every decade out on one dark table around the title. Slide along the timeline to light up a year, click a decade to zoom in.
 - **Decades** are tables you can drag and zoom, with one cluster of prints per year.
 - **Years** show each event's photos in rows. Home movies play in an 8mm film frame, with chapters, captions and the photos taken that day.
-- **The photo viewer** lifts a print off the page. You can swipe through the set, zoom in, turn the print over to read the back, and save favorites.
+- **Prints grow under the pointer.** Clicking one brings it closer: it lifts off the page and comes toward you while the page stays behind it, softly blurred. From there you can move through the other prints on the page, turn the print over to read the back, or save it to favorites. Click it again (or beside it, or scroll) and it goes back to its place.
+- **Play** turns a year, a decade or your favorites into a slideshow: one print at a time, slowly drifting closer, with its date and caption.
 - **Search** covers names, places, events and years.
-- **On iPhone** the home page is one long collage. A dock at the bottom jumps between decades.
+- **On iPhone** the home page is one long collage, with a dock at the bottom that jumps between decades. A tapped photo comes up above a sheet with its details and buttons to save, turn over or share it. The site can also be added to the Home Screen like an app.
 
 Everything in `site/` right now is **test content**: placeholder photos and a short placeholder film. Replace it with the real scans using the steps below.
 
@@ -30,6 +31,12 @@ The `site` folder is the whole website. It is plain HTML, CSS, JavaScript and im
 - **Netlify Drop** is the quickest. Open <https://app.netlify.com/drop> and drag the `site` folder onto the page. You get a link like `https://richards-archive.netlify.app` in about a minute. To update it later, drag the folder onto the site's Deploys page.
 - **Cloudflare Pages** is the best choice if you also want it private (see below). Go to Workers & Pages → Create → Pages → *Upload assets* and upload the `site` folder.
 - **GitHub Pages** only serves from a repository's root or `/docs` folder. Copy the contents of `site/` into one of those, or use Netlify or Cloudflare instead.
+
+### On a phone
+
+On iPhone, open the site in Safari, tap the Share button, then **Add to Home Screen**. It opens full screen with its own icon, like an app. The bottom of the phone home page shows the same tip. Android phones offer an **Add to Home Screen** button there instead.
+
+The icon and name come from `site/manifest.json` and the images in `site/icons/`.
 
 ### Keep it private
 
@@ -61,7 +68,7 @@ Each relative then signs in with a one-time code sent to their email. Netlify's 
 
 3. Check the result with `npm run serve`, then upload the `site` folder again.
 
-The script makes two WebP files per photo in `site/photos/`: a 1600px large version for the viewer and a 560px thumbnail. It also writes the photo's entry in `site/data/archive.js`.
+The script makes two WebP files per photo in `site/photos/`: a 1600px large version for photos brought closer and slideshows, and a 560px thumbnail. It also writes the photo's entry in `site/data/archive.js`.
 
 ### What's in `site/data/archive.js`
 
@@ -99,7 +106,7 @@ A movie entry has these fields:
 
 - The source is in `src/`: `index.html`, `styles.css`, and `js/`.
   - The views are in `js/views/`.
-  - The photo viewer and search are in `js/overlays/`.
+  - Bringing a photo closer, the slideshow and search are in `js/overlays/` (`closer.js`, `story.js`, `search.js`).
   - Layouts, the camera, gestures and animation helpers are in `js/`.
 - `npm run build` bundles everything into `site/app.js`, `site/styles.css` and `site/index.html`.
 - `npm run serve` rebuilds every time you save.
@@ -111,19 +118,20 @@ Colours and fonts are set at the top of `styles.css`. On desktop, the home table
 Most of the movement lives in three places:
 
 - `src/js/motion.js` holds the effects:
-  - prints tilt toward the pointer with light moving across the paper
+  - prints grow under the pointer, springing up a little past their size and settling, then tilt toward it with light moving across the paper
   - round buttons lean toward the pointer
   - saving a photo sends up a burst of hearts
   - headings rise in word by word
   - year numbers roll like an odometer
   - counts tick up
+- `src/js/overlays/closer.js` moves a photo brought closer on springs, so it can be grabbed, flung to the next photo or put back mid-flight without a jolt. When it is put back, the page scrolls (or the table pans) to its place if needed and the photo lands there.
+- `src/js/overlays/story.js` plays the slideshows.
 - `src/js/scroll.js` smooths mouse-wheel scrolling on desktop with [Lenis](https://github.com/darkroomengineering/lenis). Phones keep their own scrolling.
 - The "Motion" section of `styles.css` covers the rest:
   - prints are dealt in as they scroll into view
   - photos drift inside their frames as the page scrolls (desktop, in browsers with CSS scroll-driven animations)
   - the home table slowly breathes
   - film sprockets run while a movie plays
-  - the open photo's colours glow behind it
 
 Everything is calmed down for anyone who has turned on "reduce motion".
 
@@ -132,14 +140,17 @@ Everything is calmed down for anyone who has turned on "reduce motion".
 | | |
 |---|---|
 | `/` or Ctrl/⌘ K | Search |
-| ← → | Next or previous photo in the viewer. On a year page, the next or previous year. On a decade page, moves the highlight. |
-| F | Turn the open photo over |
-| H | Save the open photo to favorites |
-| Esc | Close the viewer, search or film |
+| ← → | Next or previous photo when one is brought closer, or in a slideshow. On a year page, the next or previous year. On a decade page, moves the highlight. |
+| F | Turn the photo over |
+| H | Save the photo to favorites |
+| Esc | Put the photo back, or close a slideshow, search or film |
+| Space | Pause or play a slideshow |
 | + − 0 | Zoom the decade table in, out, or back to fit |
 | Space or K, J/L, M, C | Film: play or pause, back or forward 10 seconds, mute, captions |
 
-- On a phone, swipe a photo sideways for the next one, swipe down to close it, and double-tap to zoom.
+- On a phone, swipe a photo sideways for the next one, swipe it down to put it back, and double-tap or pinch to zoom.
+- In a slideshow, tap the right side for the next photo and the left side for the one before. Hold a finger down to pause, and swipe down to stop.
+- Every photo has its own link, such as `#/1970s/1976/m12`. Opening it goes to that year and brings the photo closer. On a phone, the Share button sends the photo itself, or this link where a phone can't share files.
 - Favorites are kept in each person's browser. They are not shared with anyone else.
 - If someone has turned on "reduce motion", the site keeps its animations short.
 

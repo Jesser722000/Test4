@@ -3,14 +3,15 @@ import { fly, geom, onScreen, landAll, animate, EASE } from './anim.js';
 import { renderTopbar, closeMenu, toast } from './chrome.js';
 import { hideTip } from './print.js';
 import { hudIn, hudOut } from './hud.js';
-import { revealNow, isShown, yearHref } from './views/base.js';
+import { revealNow, isShown, yearHref, photoHref } from './views/base.js';
 import { HomeDesk } from './views/home-desk.js';
 import { HomeMob, DecadeMob } from './views/phone.js';
 import { DecadeDesk } from './views/decade-desk.js';
 import { YearView } from './views/year.js';
 import { MovieView } from './views/movie.js';
 import { FavoritesView } from './views/favorites.js';
-import { Viewer } from './overlays/viewer.js';
+import { Closer } from './overlays/closer.js';
+import { Story } from './overlays/story.js';
 import { Search } from './overlays/search.js';
 import { initSmoothScroll, setSmooth, scrollToY } from './scroll.js';
 import { initTilt, initMagnetic, resetTilt } from './motion.js';
@@ -51,10 +52,13 @@ function parse(hash) {
   if (mv && mv.year === year) return { name: 'movie', decade, year, movie: mv, key: `/${decade}s/${year}/${mv.id}`, depth: 3 };
   const ev = store.event(parts[2]);
   if (ev && ev.year === year) return { ...yRoute, event: ev.id };
+  // A link to one photo opens its year and brings that photo closer.
+  const ph = store.photo(parts[2]);
+  if (ph && ph.year === year) return { ...yRoute, photo: ph.id };
   return yRoute;
 }
 
-const hashOf = (r) => `#${r.key}${r.event ? `/${r.event}` : ''}`;
+const hashOf = (r) => `#${r.key}${r.event ? `/${r.event}` : ''}${r.photo ? `/${r.photo}` : ''}`;
 
 function viewFor(route) {
   const phone = isPhone();
@@ -169,6 +173,13 @@ async function show(route, { first = false, instant = false } = {}) {
   resetTilt();
   const old = app.view;
   const back = track(route.key);
+  if (route.photo) {
+    // Open the photo once the page is up; the address goes back to the page itself.
+    app.opts.openPhoto = route.photo;
+    try { history.replaceState(history.state, '', `#${route.key}`); } catch { /* ignore */ }
+    route = { ...route, photo: null };
+    if (old && old.route.key === route.key) { openPending(old); return; }
+  }
 
   if (old && !instant && old.route.key === route.key) {
     if (old.update(route)) { app.route = route; return; }
@@ -189,12 +200,13 @@ async function show(route, { first = false, instant = false } = {}) {
       if (onScreen(g, 0)) sources.set(k, { g, n });
     }
   }
-  if (app.viewer.isOpen) {
-    const card = app.viewer.card();
+  if (app.closer.isOpen) {
+    const card = app.closer.card();
     const g = card && geom(card);
-    if (g && !instant) sources.set(`p:${app.viewer.photo.id}`, { g, n: card });
-    app.viewer.handoff();
+    if (g && !instant) sources.set(`p:${app.closer.photo.id}`, { g, n: card });
+    app.closer.handoff();
   }
+  if (app.story.isOpen) app.story.close();
   if (app.search.isOpen) app.search.close({ quick: true });
 
   if (old) scrollMem.set(old.route.key, window.scrollY);
@@ -285,27 +297,33 @@ function titleFor(r) {
   return `${f} Family Archive`;
 }
 
-/** After "Surprise me", open the chosen photo from its print on the year page. */
+/** After "Surprise me", a search or a link to one photo: bring the photo closer from its print on the page. */
 function openPending(v) {
   const id = app.take('openPhoto');
   if (!id || v !== app.view) return;
-  const n = v.shared().get(`p:${id}`);
-  const list = v.list || store.photosInYear(store.photo(id).year);
+  const n = v.printFor(id);
+  const list = v.photoList();
   const i = list.findIndex((p) => p.id === id);
   if (!n || i < 0) return;
   const r = n.getBoundingClientRect();
   const visible = r.top > 80 && r.bottom < innerHeight - 90;
   const arrive = visible ? wait(120) : scrollToY(window.scrollY + r.top - innerHeight / 2 + r.height / 2, { smooth: true });
-  arrive.then(() => { if (app.view === v) { revealNow(n); app.viewer.open(list, i, n); } });
+  arrive.then(() => { if (app.view === v) { revealNow(n); app.closer.open(list, i, n); } });
 }
 
 /* ---------- App API used by the pages ---------- */
 app.go = (hash, opts = {}) => {
   app.opts = { ...app.opts, ...opts };
   const route = parse(hash);
-  if (opts.fromViewer && app.viewer.isOpen && app.viewer.pushed) {
-    // Replace the viewer's history entry so Back returns to the page under it.
-    app.viewer.pushed = false;
+  if (route.photo && app.view && app.route?.key === route.key) {
+    // Already on the photo's page: just bring it closer.
+    app.opts.openPhoto = route.photo;
+    openPending(app.view);
+    return;
+  }
+  if (opts.fromCloser && app.closer.isOpen && app.closer.pushed) {
+    // Replace the closer's history entry so Back returns to the page under it.
+    app.closer.pushed = false;
     try { history.replaceState(null, '', hashOf(route)); } catch { /* ignore */ }
     show(route);
     return;
@@ -337,19 +355,22 @@ app.up = () => {
 
 app.rerender = () => { if (app.route) show(app.route, { instant: true }); };
 app.scrollTo = scrollToY;
-app.openViewer = (list, index, origin) => app.viewer.open(list, index, origin);
-app.viewerClosed = () => app.view?.onViewerClosed?.();
+/** Bring a print's photo closer, moving through the other prints on the same page. */
+app.openPhoto = (node) => {
+  const v = app.view;
+  if (!v || !node) return;
+  const list = v.photoList();
+  const i = list.findIndex((p) => p.id === node.dataset.pid);
+  if (i >= 0) app.closer.open(list, i, node);
+};
+app.closerClosed = () => app.view?.onCloserClosed?.();
+app.play = (photos, opts) => app.story.open(photos, opts);
 app.openSearch = () => { closeMenu(); app.search.open(); };
 app.toast = toast;
 
 app.surprise = () => {
   const ps = store.allPhotos();
-  const p = ps[Math.floor(Math.random() * ps.length)];
-  const hash = yearHref(p.year);
-  if (app.route?.key === parse(hash).key) {
-    app.opts.openPhoto = p.id;
-    openPending(app.view);
-  } else app.go(hash, { openPhoto: p.id });
+  app.go(photoHref(ps[Math.floor(Math.random() * ps.length)]));
 };
 
 const locks = new Set();
@@ -372,18 +393,20 @@ function boot() {
   initMagnetic();
   app.hud = el('div', { class: 'hud', id: 'hud' });
   app.stage.after(app.hud);
-  app.viewer = new Viewer(app);
+  app.closer = new Closer(app);
+  app.story = new Story(app);
   app.search = new Search(app);
 
   window.addEventListener('hashchange', () => show(parse(location.hash)));
   window.addEventListener('popstate', (e) => {
-    if (app.viewer.isOpen && !e.state?.viewer) app.viewer.onPop();
+    if (app.closer.isOpen && !e.state?.closer) app.closer.onPop();
+    if (app.story.isOpen && !e.state?.story) app.story.onPop();
   });
   window.addEventListener('resize', debounce(() => app.view?.onResize?.(), 120));
   onPhoneChange(() => app.rerender());
   window.addEventListener('scroll', updateBar, { passive: true });
   document.addEventListener('keydown', (e) => {
-    if (e.defaultPrevented || app.viewer.isOpen || app.search.isOpen || document.querySelector('.panel-wrap')) return;
+    if (e.defaultPrevented || app.closer.isOpen || app.story.isOpen || app.search.isOpen || document.querySelector('.panel-wrap')) return;
     const t = e.target;
     const typing = t.closest?.('input, textarea, select, [contenteditable="true"]');
     if (!typing && (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'))) {

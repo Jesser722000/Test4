@@ -1,8 +1,10 @@
 import { el, clamp, canHover, reduceMotion } from './util.js';
-import { animate, tick, Follow, SPRING, EASE } from './anim.js';
+import { animate, tick, Follow, Spring, SPRING, EASE } from './anim.js';
 
-/* ---------- Prints tilt toward the pointer, with light sliding across the paper ---------- */
-const TILT = 9;
+/* ---------- Prints grow toward you under the pointer, tilt, and catch the light ---------- */
+const TILT = 8;
+// How much a print grows on hover: small prints grow more, big ones a little less.
+export const growFor = (w, h) => clamp(50 / Math.sqrt(Math.max(1, w * h)), 0.1, 0.22);
 let tilt = null;
 
 export function initTilt() {
@@ -11,35 +13,41 @@ export function initTilt() {
   let cur = null;
   let stop = null;
 
-  const state = (node) => ({
-    node,
-    base: parseFloat(node.dataset.rot) || 0,
-    rect: node.getBoundingClientRect(),
-    lift: new Follow(0, 0.09),
-    rx: new Follow(0, 0.11),
-    ry: new Follow(0, 0.11),
-    gx: 50,
-    gy: 50,
-  });
+  const state = (node) => {
+    const rect = node.getBoundingClientRect();
+    return {
+      node,
+      base: parseFloat(node.dataset.rot) || 0,
+      rect,
+      grow: (node._grow = growFor(rect.width, rect.height)),
+      // A touch of overshoot on the way up, none on the way down.
+      lift: new Spring(0, { stiffness: 300, damping: 23, precision: 0.0005 }),
+      rx: new Follow(0, 0.11),
+      ry: new Follow(0, 0.11),
+      gx: 50,
+      gy: 50,
+    };
+  };
 
   const apply = (s) => {
     const l = s.lift.value;
     const st = s.node.style;
-    st.setProperty('--s', (1 + 0.06 * l).toFixed(4));
+    st.setProperty('--s', (1 + s.grow * l).toFixed(4));
     st.setProperty('--r', `${(s.base * (1 - l)).toFixed(3)}deg`);
     st.setProperty('--rx', `${s.rx.value.toFixed(3)}deg`);
     st.setProperty('--ry', `${s.ry.value.toFixed(3)}deg`);
     st.setProperty('--gx', `${s.gx.toFixed(1)}%`);
     st.setProperty('--gy', `${s.gy.toFixed(1)}%`);
-    st.setProperty('--glare', l.toFixed(3));
+    st.setProperty('--glare', clamp(l, 0, 1).toFixed(3));
   };
 
-  // Back at rest: hand the print back to its stylesheet.
+  // Back at rest: hand the print back to its stylesheet (and its page, which may have raised it).
   const settle = (s) => {
     const st = s.node.style;
     s.node.classList.remove('is-tilt');
     st.setProperty('--r', `${s.base}deg`);
     for (const p of ['--s', '--rx', '--ry', '--gx', '--gy', '--glare']) st.removeProperty(p);
+    s.node.dispatchEvent(new CustomEvent('print:rest', { bubbles: true }));
   };
 
   const run = () => {
@@ -47,9 +55,9 @@ export function initTilt() {
     stop = tick((dt) => {
       let moving = false;
       if (cur) {
-        cur.lift.step(dt); cur.rx.step(dt); cur.ry.step(dt);
-        apply(cur);
-        moving = true;
+        const a = cur.lift.step(dt), b = cur.rx.step(dt), c = cur.ry.step(dt);
+        // A print held still under a still pointer needs no frames at all.
+        if (a || b || c || cur.dirty) { apply(cur); cur.dirty = false; moving = a || b || c; }
       }
       for (const s of springing) {
         const a = s.lift.step(dt), b = s.rx.step(dt), c = s.ry.step(dt);
@@ -62,17 +70,20 @@ export function initTilt() {
 
   const release = () => {
     if (!cur) return;
-    cur.lift.target = cur.rx.target = cur.ry.target = 0;
+    cur.lift.tune(300, 36).target = 0;
+    cur.rx.target = cur.ry.target = 0;
     springing.add(cur);
     cur = null;
     run();
   };
 
   const grab = (node) => {
+    // The page may move the print above its neighbours first (the home table keeps prints in depth layers).
+    node.dispatchEvent(new CustomEvent('print:lift', { bubbles: true }));
     let s = [...springing].find((x) => x.node === node);
     if (s) { springing.delete(s); s.rect = node.getBoundingClientRect(); } else s = state(node);
     node.classList.add('is-tilt');
-    s.lift.target = 1;
+    s.lift.tune(300, 23).target = 1;
     apply(s);
     cur = s;
     run();
@@ -93,6 +104,7 @@ export function initTilt() {
     cur.rx.target = -(ny - 0.5) * 2 * TILT;
     cur.gx = nx * 100;
     cur.gy = ny * 100;
+    cur.dirty = true;
     run();
   }, { passive: true });
   document.documentElement.addEventListener('pointerleave', release);
@@ -111,7 +123,7 @@ export function initTilt() {
 export const resetTilt = () => tilt?.reset();
 
 /* ---------- Round buttons lean toward the pointer ---------- */
-const MAGNETIC = '.icon-btn, .big-play, .viewer-close, .viewer-nav, .mv-close, .zoomer button, .dock .arrow, .avatar, .fc-play, .c-btn';
+const MAGNETIC = '.icon-btn, .big-play, .closer-close, .closer-nav, .st-close, .mv-close, .zoomer button, .dock .arrow, .avatar, .fc-play, .c-btn';
 
 export function initMagnetic() {
   if (!canHover() || reduceMotion()) return;

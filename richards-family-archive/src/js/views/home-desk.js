@@ -19,17 +19,25 @@ export class HomeDesk extends View {
     const L = homeLayout();
     this.table = el('div', { class: 'table' });
     this.layers = DEPTH.map((_, i) => el('div', { class: 'layer', dataset: { depth: String(i) } }));
-    this.table.append(...this.layers);
+    // Each depth has a twin above all three, moving exactly with it, where a hovered print is lifted
+    // so it can grow over prints from any depth.
+    this.tops = DEPTH.map((_, i) => el('div', { class: 'layer layer-top', dataset: { depth: String(i) } }));
+    this.table.append(...this.layers, ...this.tops);
     this.prints = new Map();
     this.byDecade = new Map();
+    this.stacks = this.layers.map(() => []);
     for (const it of [...L.items].sort((a, b) => a.z - b.z)) {
       const p = makePrint(it.photo, { w: it.w, h: it.h, x: it.x, y: it.y, r: it.r, eager: true });
       p.dataset.decade = String(it.decade);
+      p.dataset.layer = String(it.layer);
       this.layers[it.layer].append(p);
+      this.stacks[it.layer].push(p);
       this.prints.set(it.photo.id, p);
       if (!this.byDecade.has(it.decade)) this.byDecade.set(it.decade, []);
       this.byDecade.get(it.decade).push(p);
     }
+    this.on(this.table, 'print:lift', (e) => this.raise(e.target));
+    this.on(this.table, 'print:rest', (e) => this.lower(e.target));
     this.labels = L.labels.map((l) => {
       const a = el('a', { class: 'decade-label', href: `#/${l.decade}s`, style: { left: `${l.x}px`, top: `${l.y}px` }, dataset: { decade: String(l.decade) } }, `${l.decade}s`);
       a.addEventListener('pointerenter', () => this.focus(l.decade));
@@ -67,9 +75,7 @@ export class HomeDesk extends View {
 
     this.on(this.el, 'click', (e) => {
       const p = e.target.closest('.print');
-      if (!p) return;
-      const list = store.allPhotos();
-      this.app.openViewer(list, list.findIndex((x) => x.id === p.dataset.pid), p);
+      if (p) this.app.openPhoto(p);
     });
     this.later(attachTip(this.el, (p) => {
       const ph = store.photo(p.dataset.pid);
@@ -85,6 +91,23 @@ export class HomeDesk extends View {
     const m = new Map();
     for (const [id, n] of this.prints) m.set(`p:${id}`, n);
     return m;
+  }
+
+  /** Move a print to its depth's twin layer, above every other print on the table. */
+  raise(p) {
+    const i = +p.dataset.layer;
+    if (p.parentNode === this.tops[i]) return;
+    this.tops[i].append(p);
+  }
+
+  /** Put it back in its own layer, in its old place in the pile. */
+  lower(p) {
+    const i = +p.dataset.layer;
+    const layer = this.layers[i];
+    if (!layer || p.parentNode === layer) return;
+    const pile = this.stacks[i];
+    const next = pile.slice(pile.indexOf(p) + 1).find((n) => n.parentNode === layer);
+    layer.insertBefore(p, next || null);
   }
 
   /** Fit the table to the window, filling it a little past the edges like the real thing. */
@@ -120,7 +143,9 @@ export class HomeDesk extends View {
     const loop = (dt) => {
       if (!this.alive) return false;
       const a = fx.step(dt), b = fy.step(dt);
-      this.layers.forEach((l, i) => { l.style.transform = `translate3d(${(-fx.value * DEPTH[i]).toFixed(2)}px, ${(-fy.value * DEPTH[i]).toFixed(2)}px, 0)`; });
+      this.layers.forEach((l, i) => {
+        l.style.transform = this.tops[i].style.transform = `translate3d(${(-fx.value * DEPTH[i]).toFixed(2)}px, ${(-fy.value * DEPTH[i]).toFixed(2)}px, 0)`;
+      });
       this.shift.style.transform = `translate3d(${(fx.value * 6).toFixed(2)}px, ${(fy.value * 5).toFixed(2)}px, 0)`;
       running = a || b;
       return running;

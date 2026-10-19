@@ -1,5 +1,5 @@
 import { YearView } from './year.js';
-import { filmCard, decadeHref } from './base.js';
+import { filmCard, decadeHref, playChip } from './base.js';
 import { el, icon, plural, seeded } from '../util.js';
 import { makePrint, attachTip } from '../print.js';
 import { revealWords, countUp } from '../motion.js';
@@ -23,7 +23,8 @@ export class FavoritesView extends YearView {
       el('div', null,
         el('p', { class: 'eyebrow yv-eyebrow' }, 'Saved on this device'),
         el('h1', null, 'Favorites'),
-        el('p', null, photos.length || movies.length ? 'The moments you keep coming back to.' : 'Nothing saved yet.')),
+        el('p', null, photos.length || movies.length ? 'The moments you keep coming back to.' : 'Nothing saved yet.'),
+        photos.length > 1 ? playChip('Play your favorites', () => this.app.play(this.list, { title: 'Favorites', end: 'Those were your favorites.' })) : null),
       el('div', { class: 'yv-stats' },
         el('span', null, plural(photos.length, 'photo')),
         movies.length ? el('span', null, plural(movies.length, 'home movie')) : null)));
@@ -67,14 +68,13 @@ export class FavoritesView extends YearView {
 
     this.on(this.el, 'click', (e) => {
       const p = e.target.closest('.print');
-      if (!p) return;
-      this.app.openViewer(this.list, this.list.findIndex((x) => x.id === p.dataset.pid), p);
+      if (p) this.app.openPhoto(p);
     });
     this.later(attachTip(this.el, (n) => {
       const ph = store.photo(n.dataset.pid);
       return ph && { kicker: ph.date, title: ph.title };
     }));
-    // Un-hearting from the viewer takes the photo off this page once the viewer closes.
+    // Un-hearting a photo held up close takes it off this page once it is put back.
     this.later(store.onFavChange(() => { this.dirty = true; }));
   }
 
@@ -85,7 +85,7 @@ export class FavoritesView extends YearView {
 
   headingsRise() {}
 
-  onViewerClosed() {
+  onCloserClosed() {
     if (this.dirty) { this.dirty = false; this.app.rerender(); }
   }
 

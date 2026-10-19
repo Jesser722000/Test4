@@ -1,6 +1,6 @@
 import { el, icon, debounce, plural, fmtTime } from '../util.js';
 import { animate, EASE } from '../anim.js';
-import { yearHref, decadeHref, eventHref, movieHref } from '../views/base.js';
+import { yearHref, decadeHref, eventHref, movieHref, photoHref } from '../views/base.js';
 import { openAbout } from '../chrome.js';
 import * as store from '../store.js';
 
@@ -86,9 +86,10 @@ export class Search {
     if (qb) { this.input.value = qb.dataset.q; this.render(qb.dataset.q); this.input.focus(); return; }
     const pb = e.target.closest('.sr-photos button');
     if (pb) {
-      const list = this.photoHits || [];
-      this.app.openViewer(list, +pb.dataset.i, pb);
+      // Go to the photo's page and bring it closer from its own print there.
+      const p = (this.photoHits || [])[+pb.dataset.i];
       this.close({ quick: true });
+      if (p) this.app.go(photoHref(p));
       return;
     }
     const a = e.target.closest('a[href]');

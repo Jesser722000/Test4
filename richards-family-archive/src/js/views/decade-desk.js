@@ -1,4 +1,4 @@
-import { View, yearHref, decadeHref } from './base.js';
+import { View, yearHref, decadeHref, playChip } from './base.js';
 import { el, icon, clamp, plural, reduceMotion } from '../util.js';
 import { SPRING, EASE } from '../anim.js';
 import { makePrint, attachTip, sharpen } from '../print.js';
@@ -26,7 +26,8 @@ export class DecadeDesk extends View {
     this.titleEl = el('div', { class: 'decade-title', style: { left: `${L.title.x}px`, top: `${L.title.y}px` } },
       el('h1', null, `The ${d}s.`),
       el('p', null, store.tagline(d)),
-      el('p', { class: 'stats' }, `${plural(nPhotos, 'photo')}${nMovies ? ` · ${plural(nMovies, 'home movie')}` : ''}`));
+      el('p', { class: 'stats' }, `${plural(nPhotos, 'photo')}${nMovies ? ` · ${plural(nMovies, 'home movie')}` : ''}`),
+      playChip(`Play the ${d}s`, () => this.app.play(store.photosInDecade(d), { title: `the ${d}s`, years: true })));
     this.table.append(this.titleEl);
 
     for (const c of L.clusters) {
@@ -40,7 +41,7 @@ export class DecadeDesk extends View {
         node.append(p);
         this.prints.set(pr.photo.id, p);
       });
-      const explore = el('a', { class: 'cluster-explore', href: yearHref(c.year), style: { left: `${c.w / 2}px`, top: `${c.h + 22}px` } },
+      const explore = el('a', { class: 'cluster-explore', href: yearHref(c.year), style: { left: `${c.w / 2}px`, top: `${c.h + 44}px` } },
         el('span', { class: 'yr' }, String(c.year)),
         el('span', { class: 'go' }, `Explore ${c.year}`, icon('arrowRight', 22)));
       node.append(explore);
@@ -109,6 +110,17 @@ export class DecadeDesk extends View {
     const m = new Map();
     for (const [id, n] of this.prints) m.set(`p:${id}`, n);
     return m;
+  }
+
+  /** Pan the table so a print is on screen (for a photo being put back). */
+  bringIntoView(node) {
+    const b = node.getBoundingClientRect();
+    const v = this.cam.view();
+    if (b.left >= v.x && b.right <= v.x + v.w && b.top >= v.y && b.bottom <= v.y + v.h) return true;
+    const w = this.cam.toWorld(b.left + b.width / 2, b.top + b.height / 2);
+    this.cam.centerOn(w.x, w.y, Math.max(this.cam.ts, Math.min(1, this.home.s)));
+    this.fitted = false;
+    return true;
   }
 
   insets() {
@@ -184,11 +196,12 @@ export class DecadeDesk extends View {
     }, { filter: (e) => !e.target.closest('a.cluster-explore') });
     this.later(stopDrag);
 
-    // A drag that started on a print is not a click.
+    // A drag that started on a print is not a click. A click on a print brings it closer;
+    // the year's name and "Explore" open the whole year.
     this.on(this.el, 'click', (e) => {
       if (dragged) { e.preventDefault(); e.stopPropagation(); return; }
-      const cl = e.target.closest('.cluster');
-      if (cl && !e.target.closest('a')) this.app.go(yearHref(+cl.dataset.year));
+      const p = e.target.closest('.print');
+      if (p && !p.closest('.ghost')) this.app.openPhoto(p);
     }, true);
 
     this.on(this.el, 'wheel', (e) => {
@@ -218,11 +231,12 @@ export class DecadeDesk extends View {
   }
 
   textIn() {
-    const [h1, tag, stats] = this.titleEl.children;
+    const [h1, tag, stats, play] = this.titleEl.children;
     revealWords(h1, { delay: 150, stagger: 90, duration: 1200 });
     revealWords(tag, { delay: 420, stagger: 40, duration: 1000 });
     this.anim(stats, [{ opacity: 0 }, { opacity: 1 }], { duration: 800, delay: 700, fill: 'backwards' });
     countUp(stats, { delay: 700 });
+    this.anim(play, [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'none' }], { duration: 1000, delay: 900, easing: SPRING, fill: 'backwards' });
   }
 
   enter(ctx) {

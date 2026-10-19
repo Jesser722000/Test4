@@ -95,7 +95,7 @@ export function yearSummary(y) {
 }
 
 /* ---------- Search ---------- */
-const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 
 export function search(q) {
   const terms = norm(q).split(/\s+/).filter(Boolean);

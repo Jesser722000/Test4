@@ -76,15 +76,50 @@ export class Follow {
   snap(v = this.target) { this.value = this.target = v; }
 }
 
+/**
+ * A damped spring. Unlike an eased tween it keeps its velocity when the target moves,
+ * so a print can be grabbed, flung or sent back mid-flight without a jolt.
+ */
+export class Spring {
+  constructor(value, { stiffness = 240, damping = 28, precision = 0.01 } = {}) {
+    this.value = value;
+    this.target = value;
+    this.v = 0;
+    this.k = stiffness;
+    this.c = damping;
+    this.precision = precision;
+  }
+
+  tune(stiffness, damping) { this.k = stiffness; this.c = damping; return this; }
+
+  step(dt) {
+    if (this.v === 0 && this.value === this.target) return false;
+    const n = Math.max(1, Math.ceil(dt / 0.004));
+    const h = dt / n;
+    for (let i = 0; i < n; i++) {
+      this.v += (-this.k * (this.value - this.target) - this.c * this.v) * h;
+      this.value += this.v * h;
+    }
+    if (Math.abs(this.value - this.target) < this.precision && Math.abs(this.v) < this.precision * 12) {
+      this.value = this.target;
+      this.v = 0;
+      return false;
+    }
+    return true;
+  }
+
+  snap(v = this.target) { this.value = this.target = v; this.v = 0; }
+}
+
 /* ---------- Print geometry for shared-element flights ---------- */
 /** Screen-space centre, unrotated size and rotation of a print, from its bounding box. */
-export function geom(node) {
+export function geom(node, rot) {
   if (!node || !node.isConnected) return null;
   const b = node.getBoundingClientRect();
   if (!b.width || !b.height) return null;
   const ow = node.offsetWidth || b.width;
   const oh = node.offsetHeight || b.height;
-  const r = parseFloat(node.dataset.rot || getComputedStyle(node).getPropertyValue('--r')) || 0;
+  const r = rot ?? (parseFloat(node.dataset.rot || getComputedStyle(node).getPropertyValue('--r')) || 0);
   const rad = Math.abs(r * Math.PI / 180);
   const a = ow / oh;
   const h = b.height / (Math.sin(rad) * a + Math.cos(rad));

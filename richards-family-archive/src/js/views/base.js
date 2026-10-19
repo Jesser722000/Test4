@@ -1,5 +1,6 @@
-import { el, fmtTime } from '../util.js';
+import { el, icon, fmtTime } from '../util.js';
 import { animate, EASE } from '../anim.js';
+import * as store from '../store.js';
 
 /**
  * A page of the archive. The router mounts it, asks it which prints it shares with the
@@ -24,6 +25,15 @@ export class View {
   /** Same page, new details (an event anchor, say). Return true when handled. */
   update() { return false; }
   onResize() {}
+
+  /** The photos that have a print on this page, in the order the closer moves through them. */
+  photoList() {
+    const ids = new Set([...this.shared().keys()].filter((k) => k.startsWith('p:')).map((k) => k.slice(2)));
+    return store.allPhotos().filter((p) => ids.has(p.id));
+  }
+
+  /** The print a photo goes back to when it is put down. */
+  printFor(id) { return this.shared().get(`p:${id}`) || null; }
 
   on(target, type, fn, opts) {
     target.addEventListener(type, fn, opts);
@@ -134,6 +144,13 @@ export const yearHref = (y) => `#/${Math.floor(y / 10) * 10}s/${y}`;
 export const decadeHref = (d) => `#/${d}s`;
 export const movieHref = (m) => `#/${Math.floor(m.year / 10) * 10}s/${m.year}/${m.id}`;
 export const eventHref = (e) => `#/${Math.floor(e.year / 10) * 10}s/${e.year}/${e.id}`;
+export const photoHref = (p) => `#/${Math.floor(p.year / 10) * 10}s/${p.year}/${p.id}`;
+
+/** "Play 1976": a pill that starts the slideshow. */
+export function playChip(label, onPlay) {
+  return el('button', { class: 'chip play-chip', type: 'button', onclick: (e) => onPlay(e.currentTarget) },
+    el('span', { class: 'pc-dot', 'aria-hidden': 'true' }, icon('play', 12)), label);
+}
 
 export function filmCard(movie, { w, h, x, y } = {}) {
   const holes = (side) => el('span', { class: `sprockets ${side}`, 'aria-hidden': 'true' }, Array.from({ length: 7 }, () => el('i')));
