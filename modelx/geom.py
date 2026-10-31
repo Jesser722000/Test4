@@ -40,6 +40,16 @@ def body_field(h=H):
     Y, Z = np.meshgrid(ys * S, zs * S, indexing='ij')
     for i, x in enumerate(xs):
         F[i] = body.sdf(np.full_like(Y, x * S), Y, Z) / S
+    # make it a true distance near the skin: divide by the gradient length, so that offsets
+    # (door thickness, gaps) come out at their real size on every slope
+    g2 = np.zeros_like(F)
+    for ax in range(3):
+        d = np.gradient(F, h, axis=ax)
+        g2 += d * d
+        del d
+    np.sqrt(g2, out=g2)
+    np.clip(g2, 0.35, 6.0, out=g2)
+    F /= g2
     return F
 
 
@@ -70,24 +80,22 @@ def p(xr, zr):
 # ------------------------------------------------------------------ doors
 # Side-view outlines (full-size mm, converted).  The falcon outline runs up past
 # the roof: its roof panel is bounded by the spine hinge instead.
-Z_SILL = 292.0
+Z_SILL = 14.6 * 24           # door bottoms sit on the black rocker strip
 
 
-def rail_z(xr):
-    """height (full-size mm) of the roof rail: where the side glass meets the roof / windshield."""
-    from scipy.optimize import brentq
-    f = lambda z: z - (body.Z_ROOF(xr) - body.CROWN_R(xr) *
-                       ((body.W_BELT(xr) - (z - body.BELT(xr)) * body.TUMBLE(xr)) / 700) ** 2)
-    return brentq(f, float(body.BELT(xr)), 1900.0)
+def q(pts):
+    return [(x, z) for x, z in pts]
 
 
-# front door: vertical front edge behind the arch, top edge 40 mm under the roof
-# rail (the panoramic windshield's side edge), rear edge at the B-pillar
-_top = [p(x, rail_z(x) - 40) for x in np.linspace(1560, 2420, 14)]
-FRONT_POLY = [p(1540, Z_SILL), p(1540, rail_z(1560) - 52)] + _top + [p(2420, Z_SILL)]
-_rx, _rz, _rr = body.XR, body.ZWR, body.ARCH_R + 60
-FALCON_POLY = ([p(2500, Z_SILL), p(2500, 2100), p(3750, 2100), p(3750, 1612), p(3694, 1062)] +
-               [p(x, z) for x, z in arc(_rx, _rz, _rr, 142, 189, 16)] + [p(3461, Z_SILL)])
+# Outlines traced from the reference: the front door runs from behind the front arch to the
+# B-pillar (x ~113), its top edge follows the window frame; the falcon door runs from the
+# B-pillar to the C-pillar, wraps the front of the rear arch and continues over the roof.
+FRONT_POLY = q([(64.17, 14.6), (64.17, 45.8), (70, 49.3), (75, 52.6), (80, 55.6), (85, 58.3), (90, 60.6),
+                (95, 62.7), (100, 64.0), (105, 65.0), (110, 65.8), (114.4, 66.2), (113.2, 47.0), (113.2, 14.6)])
+_rxp, _rzp, _rrp = 164.59, 16.28, 22.1
+FALCON_POLY = (q([(117.6, 14.6), (117.6, 47.0), (120.5, 66.4), (120.5, 87.5), (156.25, 87.5), (156.25, 67.17),
+                  (153.92, 44.25)]) +
+               [(_rxp + _rrp * np.cos(t), _rzp + _rrp * np.sin(t)) for t in np.radians(np.linspace(135, 184.4, 16))])
 
 
 class Hinge:
@@ -129,6 +137,7 @@ GAX = 0.35            # axial gap between knuckles
 FIN = (215.0, 265.0)  # angular zone (deg from u toward v) of the fixed-side web
 FIN_R = 5.2           # web reaches this far out from the axis
 KEEP_OUT = (125.0, 275.0)  # door material removed from this zone near the axis
+FALCON_SEGS = 7            # knuckles along the falcon hinge
 
 
 def front_hinge():
@@ -143,7 +152,7 @@ def front_hinge():
         f = body.sdf(np.array([x_a * S]), np.array([mid * S]), np.array([z_mid * S]))[0]
         lo, hi = (mid, hi) if f < 0 else (lo, mid)
     y_skin = lo
-    h = Hinge((x_a, y_skin - 3.0, 0.0), (0, 0, 1), (1, 0, 0), 13.0, 41.4, 72.0)
+    h = Hinge((x_a, y_skin - 3.0, 0.0), (0, 0, 1), (1, 0, 0), 15.4, 43.4, 72.0)
     h.y_skin = y_skin
     return h
 
@@ -152,8 +161,8 @@ def falcon_hinge():
     # along the roof spine, 3 mm under the roof at the ends of the door
     yh = 5.2
     def roof(xp):
-        return body.Z_ROOF(xp * S) / S - body.CROWN_R(xp * S) / S * (yh * S / 700) ** 2
-    xa, xb = 2500 / S + 1.2, 3750 / S - 1.2
+        return float(body.ref_top(np.array([xp]), np.array([yh]))[0])
+    xa, xb = 120.5 + 1.2, 156.25 - 1.2
     za, zb = roof(xa) - 3.0, roof(xb) - 3.0
     a = np.array([xb - xa, 0, zb - za])
     h = Hinge((xa, yh, za), a, (0, 1, 0), 0.0, np.linalg.norm(a), 80.0)
@@ -187,10 +196,10 @@ def door_field(F, sub, kind, hinge, h=H):
     if kind == 'front':
         shell = np.maximum(f, -f - T)
         # thick hinge strip at the front edge, reaching 3 mm past the axis
-        strip = np.maximum.reduce([f, du - 4.5, -du - 2.0, -dv - 3.0, 13.0 - Z, Z - 41.6])
+        strip = np.maximum.reduce([f, du - 4.5, -du - 2.0, -dv - 3.0, (hinge.s0 - 0.4) - Z, Z - (hinge.s1 + 0.2)])
         D = np.minimum(shell, strip)
         D = np.maximum(D, sp - f)                       # outline, bevelled 45 deg with depth
-        D = np.maximum(D, 15.0 - Y)
+        D = np.maximum(D, 25.0 - Y)                     # the front door is only the outer skin...
         arcd = np.minimum(-du, r - 3.0)                  # nothing ahead of the axis beyond r = 3
         D = np.maximum(D, arcd)
     else:
@@ -225,7 +234,7 @@ def sweep_field(D, sub, hinge, sub_out, h=H, step=1.0):
     P = np.stack([X, Y, Z], -1).reshape(-1, 3) - hinge.o
     out = np.full(P.shape[0], 1e3, np.float32)
     org = np.array([xs[i0], ys[j0], zs[k0]])
-    for th in np.arange(0.0, hinge.theta_max + 1e-6, step):
+    for th in np.arange(0.0, hinge.theta_max + 3.0 + 1e-6, step):      # 3 deg past full open for margin
         Rm = hinge.rot(-th)                 # world point -> door frame at angle th
         q = P @ Rm.T + hinge.o
         idx = ((q - org) / h).T

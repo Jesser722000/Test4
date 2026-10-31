@@ -5,7 +5,16 @@
 
 Writes STL/3MF parts and preview renders into modelx/out/.  See README.md.
 """
-import os, sys, time, json, gc
+import os, sys, time, json, gc, ctypes
+
+
+def free_memory():
+    """collect, then hand freed heap back to the OS (large numpy temporaries otherwise linger)."""
+    gc.collect()
+    try:
+        ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except OSError:
+        pass
 import numpy as np
 import trimesh
 from scipy import ndimage
@@ -25,7 +34,8 @@ T0 = time.time()
 
 
 def log(*a):
-    print(f'[{time.time() - T0:7.1f}s]', *a, flush=True)
+    rss = int(open('/proc/self/statm').read().split()[1]) * 4096 / 2 ** 30
+    print(f'[{time.time() - T0:7.1f}s {rss:4.1f}G]', *a, flush=True)
 
 
 def cached(name, fn):
@@ -49,7 +59,7 @@ def sub(xr, yr, zr):
     return idx(xs, *xr) + idx(ys, *yr) + idx(zs, *zr)
 
 
-def mc(field, sb=None, level=0.0):
+def mc(field, sb=None, level=0.0013):        # off-zero level: avoids degenerate cases on exact zeros
     if sb is None:
         sb = (0, NX, 0, NY, 0, NZ)
     i0, i1, j0, j1, k0, k1 = sb
@@ -67,7 +77,7 @@ def mirror_y(m):
 FH = geom.front_hinge()
 FH.segments = geom.segments(FH, 7)
 KH = geom.falcon_hinge()
-KH.segments = geom.segments(KH, 9)
+KH.segments = geom.segments(KH, geom.FALCON_SEGS)
 KH.z_under = min(KH.o[2], KH.o[2] + KH.a[2] * KH.s1) - 2.2
 log('front hinge axis', np.round(FH.o, 2), 'falcon axis', np.round(KH.o, 2), 'slab underside', round(KH.z_under, 2))
 
@@ -75,19 +85,29 @@ log('front hinge axis', np.round(FH.o, 2), 'falcon axis', np.round(KH.o, 2), 'sl
 F = cached('F', lambda: geom.body_field(H))
 log('body field', F.shape)
 
-SUB_F = sub((60, 104), (14, 43.2), (10, 71.4))
-SUB_K = sub((102, 160), (0, 43.2), (10, 71.4))
+SUB_F = sub((60, 118), (14, 43.2), (12, 71.4))
+SUB_K = sub((114, 160), (0, 43.2), (12, 71.4))
 D_F = cached('DF', lambda: geom.door_field(F, SUB_F, 'front', FH, H))
 D_K = cached('DK', lambda: geom.door_field(F, SUB_K, 'falcon', KH, H))
 log('door fields')
 
-OUT_F = sub((55, 108), (0, 43.2), (8, 71.4))
-OUT_K = sub((100, 162), (-12, 43.2), (8, 71.4))
+OUT_F = sub((55, 122), (0, 43.2), (10, 71.4))
+OUT_K = sub((110, 162), (-12, 43.2), (10, 71.4))
 S_F = cached('SF', lambda: geom.sweep_field(D_F, SUB_F, FH, OUT_F, H, step=0.5))
 S_K = cached('SK', lambda: geom.sweep_field(D_K, SUB_K, KH, OUT_K, H, step=0.75))
 log('sweeps')
 
 B = F.copy()
+def true_distance(S_):
+    """swept field -> exact Euclidean distance to the swept volume (voxel accurate), so the
+    clearance gap is its real size whatever the scale of the source field."""
+    occ = S_ <= 0
+    out = ndimage.distance_transform_edt(~occ, sampling=H) - ndimage.distance_transform_edt(occ, sampling=H)
+    return out.astype(np.float32)
+
+
+S_F = true_distance(S_F)
+S_K = true_distance(S_K)
 for S_, ob in ((S_F, OUT_F), (S_K, OUT_K)):
     i0, i1, j0, j1, k0, k1 = ob
     g = np.full(S_.shape, geom.G, np.float32)
@@ -102,7 +122,8 @@ for S_, ob in ((S_F, OUT_F), (S_K, OUT_K)):
 
 # ===================================================================== interior
 Y_WALL = 8.0
-Z_FLOOR = 14.6
+Z_FLOOR = 16.6
+DZ_SEAT = 2.0            # seats sit on the higher floor
 
 
 def vmax(*a):
@@ -135,10 +156,11 @@ def rbox_tilt(X, Y, Z, c, he, r, lean):
 
 def seat(X, Y, Z, x0, yc, front=True):
     """forward-facing bucket seat; x0 = front edge of the cushion."""
-    cush = rbox(X, Y, Z, (x0 + 5.5, yc, (Z_FLOOR - 1 + 22.6) / 2), (5.5, 9.0, (22.6 - Z_FLOOR + 1) / 2), 1.1)
-    bolster = rbox(X, Y, Z, (x0 + 5.5, yc, 22.6), (5.0, 9.0, 0.9), 0.9)
-    back = rbox_tilt(X, Y, Z, (x0 + 11.6, yc, 34.6), (1.7, 9.0, 12.4), 1.2, 12)
-    head = rbox(X, Y, Z, (x0 + 14.3, yc, 49.6), (1.5, 5.2, 2.9), 1.1)
+    zc = 22.6 + DZ_SEAT
+    cush = rbox(X, Y, Z, (x0 + 5.5, yc, (Z_FLOOR - 1 + zc) / 2), (5.5, 9.0, (zc - Z_FLOOR + 1) / 2), 1.1)
+    bolster = rbox(X, Y, Z, (x0 + 5.5, yc, zc), (5.0, 9.0, 0.9), 0.9)
+    back = rbox_tilt(X, Y, Z, (x0 + 11.6, yc, 34.6 + DZ_SEAT), (1.7, 9.0, 12.4), 1.2, 12)
+    head = rbox(X, Y, Z, (x0 + 14.3, yc, 49.6 + DZ_SEAT), (1.5, 5.2, 2.9), 1.1)
     return vmin(cush, bolster, back, head)
 
 
@@ -148,29 +170,30 @@ INT_FIELDS = []          # (sub-box, field): cabin surfaces, 1.2 mm deep, for th
 def interior(B):
     # front cabin (both sides): footwell under a 45 deg dash, flat bridged headliner
     for side in (+1, -1):
-        sb = sub((62, 104), (0, 43.2) if side > 0 else (-43.2, 0), (13, 60))
+        sb = sub((62, 116), (0, 43.2) if side > 0 else (-43.2, 0), (15, 64))
         i0, i1, j0, j1, k0, k1 = sb
         X, Y, Z = np.meshgrid(xs[i0:i1], ys[j0:j1], zs[k0:k1], indexing='ij')
         AY = np.abs(Y)
         f = F[i0:i1, j0:j1, k0:k1]
         sp = geom.poly_sdf(geom.FRONT_POLY, X[:, 0, :], Z[:, 0, :])[:, None, :]
-        x_fw, x_dash, z_ceil = 66.6, 79.5, 54.0
+        x_fw, x_dash, z_ceil = 66.6, 85.0, 59.5
         cav = vmax(f + geom.T + geom.G - 0.25, sp + geom.M, Y_WALL - AY, Z_FLOOR - Z, Z - z_ceil,
                    np.minimum(x_dash, x_fw + (Z - Z_FLOOR)) - X)
-        b = np.maximum(B[i0:i1, j0:j1, k0:k1], -cav)
+        b0 = B[i0:i1, j0:j1, k0:k1]            # body left after the doors' swept clearance
+        b = np.maximum(b0, -cav)
         INT_FIELDS.append((sb, (cav - 1.2).astype(np.float32)))
-        st = seat(X, AY, Z, 84.0, 21.6)
+        st = seat(X, AY, Z, 92.5, 21.6)
         if side < 0:       # left-hand drive: -Y is the car's left (Y = up x rearward)
             # steering wheel: a disc leaning back 25 deg whose lower edge grows out of the dash
             t = np.radians(25)
-            dx, dz = X - 80.3, Z - 37.6
+            dx, dz = X - 85.8, Z - 40.6
             lx, lz = dx * np.cos(t) - dz * np.sin(t), dx * np.sin(t) + dz * np.cos(t)
             rim = np.maximum(np.sqrt((Y + 21.6) ** 2 + lz ** 2) - 3.4, np.abs(lx) - 0.55)
             st = np.minimum(st, rim)
-        B[i0:i1, j0:j1, k0:k1] = np.minimum(b, np.maximum(st, f + 0.6))
+        B[i0:i1, j0:j1, k0:k1] = np.minimum(b, np.maximum(st, b0 + 0.6))   # seats stay 0.6 mm clear of every door's swing
     # second row (under the falcon doors)
     for side in (+1, -1):
-        sb = sub((102, 160), (0, 43.2) if side > 0 else (-43.2, 0), (13, 66))
+        sb = sub((114, 160), (0, 43.2) if side > 0 else (-43.2, 0), (15, 68))
         i0, i1, j0, j1, k0, k1 = sb
         X, Y, Z = np.meshgrid(xs[i0:i1], ys[j0:j1], zs[k0:k1], indexing='ij')
         AY = np.abs(Y)
@@ -180,10 +203,11 @@ def interior(B):
         z_ch = KH.z_under - 7.0
         cav = vmax(f + geom.T + geom.G - 0.25, sp + geom.M + np.maximum(0, Z - z_ch),
                    Y_WALL - AY, Z_FLOOR - Z, Z - z_top)
-        b = np.maximum(B[i0:i1, j0:j1, k0:k1], -cav)
+        b0 = B[i0:i1, j0:j1, k0:k1]            # body left after the doors' swept clearance
+        b = np.maximum(b0, -cav)
         INT_FIELDS.append((sb, (cav - 1.2).astype(np.float32)))
-        st = seat(X, AY, Z, 128.6, 21.2)
-        B[i0:i1, j0:j1, k0:k1] = np.minimum(b, np.maximum(st, f + 0.6))
+        st = seat(X, AY, Z, 133.5, 21.2)
+        B[i0:i1, j0:j1, k0:k1] = np.minimum(b, np.maximum(st, b0 + 0.6))   # seats stay 0.6 mm clear of every door's swing
     return B
 
 
@@ -261,14 +285,13 @@ def door_details(D, sb, kind):
     X, Y, Z = np.meshgrid(xs[i0:i1], ys[j0:j1], zs[k0:k1], indexing='ij')
     f = F[i0:i1, j0:j1, k0:k1]
     if kind == 'front':
-        handle = [(2150, 958), (2290, 958), (2290, 985), (2150, 985)]
+        handle = [(2544, 994), (2690, 994), (2690, 1022), (2544, 1022)]
     else:
-        handle = [(3330, 962), (3470, 962), (3470, 989), (3330, 989)]
+        handle = [(2846, 994), (2986, 994), (2986, 1022), (2846, 1022)]
     return carve(D, f, X, Y, Z, 'xz', handle, 0.35, mask=Y > 30)
 
 
-B = body_details(B)
-log('surface details')
+# the measured skin already carries the lights, intake and shut lines
 
 
 # ===================================================================== keel
@@ -292,6 +315,7 @@ B[:, :, zs < 0] = np.maximum(B[:, :, zs < 0], 0.5 * H)      # flat on the bed
 log('keel voxels', int(K.sum()))
 
 # ===================================================================== meshes
+free_memory()
 body_m = mc(B)
 log('body mesh', len(body_m.faces))
 dF = door_details(D_F.copy(), SUB_F, 'front')
@@ -304,7 +328,7 @@ BODY = to_manifold(body_m)
 DOOR_F = to_manifold(door_f)
 DOOR_K = to_manifold(door_k)
 del B, K, dF, dK, D_F, D_K, S_F, S_K, body_m, door_f, door_k     # ~2.5 GB of voxels no longer needed
-gc.collect()
+free_memory()
 
 # ---- hinge hardware
 hp_f = parts.hinge_parts(FH, cone=1.0)
@@ -382,12 +406,12 @@ def tie_box(x0, x1, z0, z1, xc, zc, d0=0.9, d1=1.5):
 
 ZS = geom.Z_SILL / 24
 ties = []
-for xt in (75.0, 93.0, 110.0, 125.0, 140.0):                              # bottom edges, posts up from the sill
+for xt in (74.0, 104.0, 123.0, 132.0, 139.0):                              # bottom edges, posts up from the sill
     ties.append(tie_box(xt - 0.3, xt + 0.3, ZS + 0.33, ZS + 1.83, xt, ZS + 1.0, 1.0, 1.6))
-for xe, sgn, zt in ((100.83, -1, 24.0), (100.83, -1, 38.0), (104.17, 1, 24.0), (104.17, 1, 40.0)):  # B-pillar edges
+for xe, sgn, zt in ((113.2, -1, 26.0), (113.2, -1, 40.0), (117.6, 1, 26.0), (117.6, 1, 42.0)):  # B-pillar edges
     a, b_ = sorted((xe + sgn * 0.2, xe + sgn * 1.65))
     ties.append(tie_box(a, b_, zt - 0.2, zt + 0.2, xe + sgn, zt))
-(xa_, za_), (xb_, zb_) = geom.FALCON_POLY[5], geom.FALCON_POLY[4]      # C-pillar edge of the falcon door
+(xa_, za_), (xb_, zb_) = geom.FALCON_POLY[7], geom.FALCON_POLY[6]      # C-pillar edge of the falcon door
 for zt in (34.0, 41.0):                                                   # falcon rear edge (C-pillar)
     xe = xa_ + (zt - za_) * (xb_ - xa_) / (zb_ - za_)
     ties.append(tie_box(xe - 1.65, xe - 0.2, zt - 0.2, zt + 0.2, xe - 1, zt))
@@ -398,8 +422,8 @@ BODY = union([BODY, TIES])
 log('print ties', len(ties) * 2)
 
 # the colour work does not need sub-0.01 mm detail
-BODY, DOOR_F, DOOR_K = (m.simplify(0.008) for m in (BODY, DOOR_F, DOOR_K))
-gc.collect()
+BODY, DOOR_F, DOOR_K = (m.simplify(0.015) for m in (BODY, DOOR_F, DOOR_K))
+free_memory()
 
 
 # ===================================================================== colours
@@ -456,43 +480,99 @@ def xz_prism(poly, y0, y1):
 
 
 
-WG = greenhouse_region()
-ROT_HOOD = [[0, 1, 0, 51.6], [-1, 0, 0, 0], [0, 0, 1, 0]]          # reads from the front, clear of the lid line
-ROT_TAIL = [[0, 0, 1, 0], [1, 0, 0, 0], [0, 1, 0, 43.3]]           # reads from behind
-hood_n = parts.text_solid('N', 8.5, ROT_HOOD, 30, 50) ^ skin((44, 60), (-6, 6), (36, 48), 0.8)
-tail_t = parts.text_solid('HUSKERS', 4.0, ROT_TAIL, 195, 215, font='DejaVu Sans') ^ skin((196, 212), (-16, 16), (39, 48), 0.7)
-roof_skin = skin((100, 160), (-30, 30), (62, 71.4), 0.8)
-roof_n = {s_: parts.text_solid('N', 10.0, [[0, -1, 0, 130.5], [1, 0, 0, s_ * 17.0], [0, 0, 1, 0]], 60, 72) ^ roof_skin
+def ref_regions(h=0.4):
+    """black / white volumes: every point takes the finish of the nearest reference surface
+    (glass, black trim, lights or paint)."""
+    from scipy.spatial import cKDTree
+    R = body.ref_maps()
+    gx, gy, gz = geom.axes(h)
+    X3, Y3, Z3 = np.meshgrid(gx, gy, gz, indexing='ij')
+    pts = np.stack([X3, Y3, Z3], -1).reshape(-1, 3)
+    fi = (body.ref_sdf(pts[:, 0] * 24, pts[:, 1] * 24, pts[:, 2] * 24) / 24).reshape(X3.shape)
+    del pts
+    shell = (fi < 0.6) & (fi > -2.5)                 # classify the skin only...
+    P = np.stack([X3[shell], Y3[shell], Z3[shell]], -1)
+    db, _ = cKDTree(R['black']).query(P, workers=-1, distance_upper_bound=6.0)
+    dw, _ = cKDTree(R['white']).query(P, workers=-1, distance_upper_bound=3.0)
+    dp, _ = cKDTree(R['paint']).query(P, workers=-1, distance_upper_bound=6.0)
+    db, dw, dp = (np.minimum(d, 10.0) for d in (db, dw, dp))     # misses come back as inf
+    fb = np.full(X3.shape, 9.0, np.float32); fw = fb.copy()
+    fb[shell] = np.clip(db - np.minimum(dp, dw), -3, 3)
+    fw[shell] = np.clip(np.maximum(dw - np.minimum(dp, db), dw - 1.2), -3, 3)
+    deep = fi <= -2.5                                # ...and let the inside take the nearest skin's colour
+    _, idx = ndimage.distance_transform_edt(~shell, return_indices=True)
+    fb[deep] = fb[tuple(i[deep] for i in idx)]
+    fw[deep] = 1.0
+    del idx
+    out = []
+    for fld in (fb, fw):
+        fld = ndimage.gaussian_filter(fld, 0.6) + 1e-4 * np.sin(np.arange(fld.size, dtype=np.float32).reshape(fld.shape))
+        f = np.pad(fld, 1, constant_values=9.0)
+        v, fc, _, _ = marching_cubes(f, 0.0137, spacing=(h, h, h))
+        v += np.array([gx[0], gy[0], gz[0]]) - h
+        out.append(to_manifold(trimesh.Trimesh(v, fc, process=False)))
+    return out
+
+
+WG, HEAD = (m.simplify(0.03) for m in ref_regions())
+free_memory()
+TRIM = Manifold()
+ROT_HOOD = [[0, 1, 0, 33.0], [-1, 0, 0, 0], [0, 0, 1, 0]]          # reads from the front, centred on the hood
+ROT_TAIL = [[0, 0, 1, 0], [1, 0, 0, 0], [0, 1, 0, 39.2]]           # reads from behind, on the badge panel
+hood_n = parts.text_solid('N', 9.0, ROT_HOOD, 25, 60) ^ skin((26, 40), (-7, 7), (30, 50), 0.8)
+tail_t = parts.text_solid('HUSKERS', 4.0, ROT_TAIL, 195, 215, font='DejaVu Sans') ^ skin((196, 212), (-16, 16), (35, 44), 0.7)
+roof_skin = skin((110, 165), (-30, 30), (62, 71.4), 0.8)
+roof_n = {s_: parts.text_solid('N', 10.0, [[0, -1, 0, 138.0], [1, 0, 0, s_ * 17.0], [0, 0, 1, 0]], 60, 72) ^ roof_skin
           for s_ in (+1, -1)}
-front_skin = skin((-1, 31), (-43.2, 43.2), (6, 46), 1.1)
-rear_skin = skin((186, 212), (-43.2, 43.2), (8, 50), 1.1)
-HEAD = yz_prism([(545, 708), (620, 742), (770, 790), (900, 812), (955, 796), (948, 756), (830, 726), (640, 700), (560, 694)],
-                -1, 700 / 24) ^ front_skin
-TRIM = union([
-    yz_prism([(-1, 255), (560, 255), (600, 300), (560, 400), (-1, 400)], -1, 300 / 24) ^ front_skin,      # lower intake
-    yz_prism([(700, 330), (790, 330), (800, 560), (720, 560)], -1, 700 / 24) ^ front_skin,               # air curtains
-    yz_prism([(390, 1018), (900, 1012), (985, 1050), (960, 1098), (420, 1092)], 4780 / 24, 212) ^ rear_skin,  # tail lamps
-    yz_prism([(-1, 270), (620, 270), (600, 340), (-1, 340)], 4950 / 24, 212) ^ rear_skin,               # diffuser
-])
-UNDER = Manifold.cube([220, 100, 9.3]).translate([-5, -50, -1.0])          # underbody / keel, z < 8.3
-INTERIOR = union([to_manifold(mc(fld, sb)) for sb, fld in INT_FIELDS])
+UNDER = Manifold.cube([220, 100, 10.0]).translate([-5, -50, -1.0])         # underbody / keel, z < 9
+INTERIOR = union([to_manifold(mc(fld, sb)) for sb, fld in INT_FIELDS]).simplify(0.03)
 INT_FIELDS.clear()
-handle_skin = skin((84, 150), (28, 43.2), (37, 44), 0.9)
-HANDLES = {+1: union([xz_prism([(2150, 958), (2290, 958), (2290, 985), (2150, 985)], 30, 43.2),
-                      xz_prism([(3330, 962), (3470, 962), (3470, 989), (3330, 989)], 30, 43.2)]) ^ handle_skin}
+handle_skin = skin((100, 130), (28, 43.2), (39, 45), 0.9)
+HANDLES = {+1: union([xz_prism([(2544, 994), (2690, 994), (2690, 1022), (2544, 1022)], 30, 43.2),
+                      xz_prism([(2846, 994), (2986, 994), (2986, 1022), (2846, 1022)], 30, 43.2)]) ^ handle_skin}
 HANDLES[-1] = HANDLES[+1].mirror([0, 1, 0])
 DEEP = {'front': deep(SUB_F, geom.T - 0.6), 'falcon': deep(SUB_K, geom.T - 0.6)}
 # the front hinge sits in a ~2 mm channel at the fender / door seam: make it a dark shut line
 SEAM = Manifold.cube([2.6, 7.0, 29.6]).translate([FH.o[0] - 2.8, FH.y_skin - 5.0, 12.6])
 SEAM = union([SEAM, SEAM.mirror([0, 1, 0])])
-ENG_SKIN = skin((40, 212), (-30, 30), (36, 71.4), 0.5)
+ENG_SKIN = skin((20, 212), (-30, 30), (28, 71.4), 0.5)
 del F                    # the body field is not needed past this point
-gc.collect()
+free_memory()
 log('colour regions')
 
 DOOR_FR = DOOR_F.mirror([0, 1, 0])
 DOOR_KR = DOOR_K.mirror([0, 1, 0])
 DOORS = {'front_L': DOOR_F, 'front_R': DOOR_FR, 'falcon_L': DOOR_K, 'falcon_R': DOOR_KR}
+
+# anything that would print as a loose crumb (simplification can pinch off thin slivers) goes
+FLOAT = union([p for p in union([BODY] + list(DOORS.values())).decompose() if abs(p.volume()) < 10.0])
+if not FLOAT.is_empty():
+    log('removing loose crumbs', round(FLOAT.volume(), 3), 'mm3')
+    BODY = BODY - FLOAT
+    DOORS = {k: d - FLOAT for k, d in DOORS.items()}
+
+def clean(m, min_vol):
+    return union([p for p in m.decompose() if abs(p.volume()) > min_vol])
+
+
+def export(m, path, tol=0.012, min_vol=0.02):
+    t = to_trimesh(clean(m.trim_by_plane([0, 0, 1], 0.0).simplify(tol), min_vol))   # flat on the bed at z = 0
+    t.export(path)
+    return t
+
+
+
+os.makedirs(STL_DIR, exist_ok=True)
+# one-colour version (manual swap red -> black at the beltline): lettering engraved 0.5 mm
+ALL = union([BODY] + list(DOORS.values()))
+eng = union([hood_n, tail_t, roof_n[1], roof_n[-1]])
+ONE = clean(ALL - (eng ^ ENG_SKIN), 10.0)
+log('one-colour solid')
+log('one-colour export')
+to = export(ONE, os.path.join(STL_DIR, 'modelx_one_color.stl'), min_vol=10.0)
+log('one-colour exported')
+del ALL, ONE
+free_memory()
 
 COLS = ('red', 'white', 'black')
 PIECES = {c: [] for c in COLS}
@@ -507,6 +587,7 @@ def split(name, part, black, white, red_force=None):
     for c, m in zip(COLS, (r, w, b)):
         PIECES[c].append(m)
         to_trimesh(m.simplify(0.012)).export(os.path.join(CACHE, f'{name}_{c}_{H:.3f}.stl'))
+    log('split', name)
 
 
 split('body', BODY, union([WG, union(WHEEL_ENV), UNDER, union(WELLS), INTERIOR, TRIM, SEAM]), union([hood_n, tail_t, HEAD]))
@@ -516,39 +597,27 @@ for k, d in DOORS.items():
     if side < 0:
         dp = dp.mirror([0, 1, 0])
     white = roof_n[side] if k.startswith('falcon') else Manifold()
-    split(f'door_{k}', d, union([WG, dp, HANDLES[side], SEAM]), white,
+    # the falcon door's roof section is a fixed glass panel on the real car
+    roof_glass = Manifold.cube([36.0, 26.0, 8.0]).translate([120.3, 4.0 if side > 0 else -30.0, 64.8])
+    split(f'door_{k}', d, union([WG, dp, HANDLES[side], SEAM] + ([roof_glass] if k.startswith('falcon') else [])), white,
           red_force=parts.mirror_housing(side) if k.startswith('front') else None)
 
 
-def clean(m, min_vol):
-    return union([p for p in m.decompose() if abs(p.volume()) > min_vol])
-
-
-RED, WHITE, BLACK = (clean(union(PIECES[c]), 0.02) for c in COLS)
-log('colour split  red %.1f  white %.1f  black %.1f cm3' % tuple(m.volume() / 1000 for m in (RED, WHITE, BLACK)))
-
-# one-colour version (manual swap red -> black at the beltline): lettering engraved 0.5 mm
-ALL = union([BODY] + list(DOORS.values()))
-eng = union([hood_n, tail_t, roof_n[1], roof_n[-1]])
-ONE = clean(ALL - (eng ^ ENG_SKIN), 1.0)
-log('one-colour solid')
-
-
-def export(m, path, tol=0.012, min_vol=0.02):
-    t = to_trimesh(clean(m.trim_by_plane([0, 0, 1], 0.0).simplify(tol), min_vol))   # flat on the bed at z = 0
-    t.export(path)
-    return t
-
-
-os.makedirs(STL_DIR, exist_ok=True)
-tr = export(RED, os.path.join(STL_DIR, 'modelx_red.stl'))
-tw = export(WHITE, os.path.join(STL_DIR, 'modelx_white.stl'))
-tb = export(BLACK, os.path.join(STL_DIR, 'modelx_black.stl'))
-to = export(ONE, os.path.join(STL_DIR, 'modelx_one_color.stl'), min_vol=1.0)
-for n, m in DOORS.items():
-    to_trimesh(m.simplify(0.012)).export(os.path.join(CACHE, f'door_{n}_{H:.3f}.stl'))
-to_trimesh(BODY.simplify(0.012)).export(os.path.join(CACHE, f'body_final_{H:.3f}.stl'))
-json.dump({'h': H, 'z_under': KH.z_under, 'tris': [len(tr.faces), len(tw.faces), len(tb.faces)],
-           'bounds': to.bounds.tolist(), 'cm3': [m.volume() / 1000 for m in (RED, WHITE, BLACK)]},
+# merge, export and free one colour at a time (the merged volumes are large)
+del WG, HEAD, INTERIOR, DEEP, WELLS, WHEEL_ENV
+free_memory()
+tris, vols = [], []
+for c in COLS:
+    # the parts never touch (doors sit in their gaps), so concatenating them is enough
+    parts_c = [clean(m.trim_by_plane([0, 0, 1], 0.0).simplify(0.012), 0.02) for m in PIECES[c]]
+    PIECES[c] = None
+    vols.append(sum(p.volume() for p in parts_c) / 1000)
+    t = trimesh.util.concatenate([to_trimesh(p) for p in parts_c if not p.is_empty()])
+    t.export(os.path.join(STL_DIR, f'modelx_{c}.stl'))
+    tris.append(len(t.faces))
+    del parts_c, t
+    free_memory()
+log('colour split  red %.1f  white %.1f  black %.1f cm3' % tuple(vols))
+json.dump({'h': H, 'z_under': KH.z_under, 'tris': tris, 'bounds': to.bounds.tolist(), 'cm3': vols},
           open(os.path.join(OUT, 'stats.json'), 'w'), indent=1)
-log('exported', len(tr.faces), len(tw.faces), len(tb.faces), len(to.faces), 'bounds', np.round(to.bounds, 2).tolist())
+log('exported', tris, len(to.faces), 'bounds', np.round(to.bounds, 2).tolist())

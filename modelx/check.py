@@ -19,7 +19,7 @@ def rotated(m, h, th):
 
 
 kh = doors['falcon'][1]
-kh.segments = geom.segments(kh, 9)
+kh.segments = geom.segments(kh, geom.FALCON_SEGS)
 # the detent nubs are meant to be pushed aside by the cam lobe: measure contact outside them
 nub_zone = parts.union([parts.wedge(parts.NUB_R - 0.1, parts.CAM_HI + 0.1, a - 0.5, b + 0.5, parts.NUB - parts.NUB_HALF - 3, parts.NUB + parts.NUB_HALF + 3)
                         for i, (k, a, b) in enumerate(kh.segments) if i in (1, len(kh.segments) - 2)]).transform(parts.frame(kh))

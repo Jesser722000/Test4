@@ -217,8 +217,10 @@ def mirror_housing(side=+1):
     """door mirror on the left front door (side=+1), wedge underside <= 55 deg."""
     def balls(pts, r=0.6):
         return Manifold.batch_hull([Manifold.sphere(r, 16).translate(p) for p in pts])
-    stalk = balls([(x, y, z) for x in (70.2, 73.4) for y in (39.6, 42.4) for z in (41.6, 44.9)], 0.5)
-    house = balls([(x, y, z) for x in (68.7, 75.3) for y, z in ((41.7, 49.2), (46.8, 49.2), (41.9, 44.7), (46.8, 48.1))])
+    dx, dz = 0.8, 4.2                 # on the reference the mirror sits at x 69-76.5, z 45.4-51.1
+    stalk = balls([(x + dx, y, z + dz) for x in (70.2, 73.4) for y in (39.6, 42.4) for z in (41.6, 44.9)], 0.5)
+    house = balls([(x + dx, y, z + dz) for x in (68.7, 75.3)
+                   for y, z in ((41.7, 49.2), (46.8, 49.2), (41.9, 44.7), (46.8, 48.1))])
     m = union([stalk, house])
     return m if side > 0 else m.mirror([0, 1, 0])
 

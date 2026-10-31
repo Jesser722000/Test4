@@ -139,3 +139,83 @@ def sdf(x, y, z):
     b = smin(lower_body(x, y, z), greenhouse(x, y, z), 55.0)
     b = smax(b, -arches(x, y, z), 22.0)
     return b
+
+
+# ------------------------------------------------------------------ measured shape
+# When ref.py has measured the reference Model X, the body surface comes from those
+# height maps instead of the hand-fitted profiles above (which remain as a fallback).
+import os as _os
+from scipy import ndimage as _nd
+
+_REF = None
+
+
+def ref_maps():
+    global _REF
+    if _REF is None:
+        f = _os.path.join(_os.environ.get('MX_CACHE', '/tmp/mx_cache'), 'ref_maps.npz')
+        if not _os.path.exists(f):
+            _REF = False
+            return None
+        d = dict(np.load(f))
+        h = float(d['h'])
+        foot = d['foot']
+        edt = _nd.distance_transform_edt(~foot) - _nd.distance_transform_edt(foot)
+        d['sd'] = (edt * h).astype(np.float32)
+        gtx, gty = np.gradient(d['top'], h)
+        gbx, gby = np.gradient(d['bot'], h)
+        d['nt'] = np.sqrt(1 + gtx ** 2 + gty ** 2).astype(np.float32)
+        d['nb'] = np.sqrt(1 + gbx ** 2 + gby ** 2).astype(np.float32)
+        gwx, gwz = np.gradient(d['wid'], h)
+        d['nw'] = np.sqrt(1 + gwx ** 2 + gwz ** 2).astype(np.float32)
+        _REF = d
+    return _REF or None
+
+
+def _lookup(name, xp, yp):
+    d = _REF
+    i = (np.asarray(xp) - d['x0']) / d['h']
+    j = (np.asarray(yp) - d['y0']) / d['h']
+    return _nd.map_coordinates(d[name], [np.ravel(i), np.ravel(j)], order=1, mode='nearest').reshape(np.shape(i))
+
+
+def _lookup_xz(name, xp, zp):
+    d = _REF
+    i = (np.asarray(xp) - d['x0']) / d['h']
+    k = (np.asarray(zp) - d['z0']) / d['h']
+    return _nd.map_coordinates(d[name], [np.ravel(i), np.ravel(k)], order=1, mode='nearest').reshape(np.shape(i))
+
+
+def ref_top(xp, yp):
+    """measured top of the car (print mm) at plan position (print mm)."""
+    ref_maps()
+    return _lookup('top', xp, yp)
+
+
+def ref_sdf(x, y, z):
+    """approximate signed distance (full-size mm) to the measured body skin."""
+    xp, yp, zp = np.asarray(x) / 24.0, np.asarray(y) / 24.0, np.asarray(z) / 24.0
+    xp, yp, zp = np.broadcast_arrays(xp, yp, zp)
+    ft = (zp - _lookup('top', xp, yp)) / _lookup('nt', xp, yp)
+    fb = (_lookup('bot', xp, yp) - zp) / _lookup('nb', xp, yp)
+    fs = _lookup('sd', xp, yp)
+    fw = (np.abs(yp) - _lookup_xz('wid', xp, zp)) / _lookup_xz('nw', xp, zp)
+    fe = _lookup_xz('sside', xp, zp)                      # side-view outline
+    f = smax(smax(ft, fb, 0.25), fw, 0.3)
+    f = np.maximum(np.maximum(f, fs), fe)
+    return f * 24.0
+
+
+_hand_sdf = sdf
+
+# wheel stations and sizes measured on the reference (they fill its arches); full-size mm
+XF, XR = 40.61 * 24, 164.59 * 24
+ZWF = ZWR = 16.28 * 24
+TIRE_F = dict(d=2 * 16.28 * 24, w=265.0)
+TIRE_R = dict(d=2 * 16.28 * 24, w=275.0)
+TF, TR = 41.6 * 24 - 265.0 / 2, 41.6 * 24 - 275.0 / 2
+ARCH_F = ARCH_R = 19.6 * 24
+
+
+def sdf(x, y, z):
+    return ref_sdf(x, y, z) if ref_maps() is not None else _hand_sdf(x, y, z)

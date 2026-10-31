@@ -13,20 +13,22 @@ Inside there are seats, a dash and a steering wheel, so there's something to see
 | ![hero](renders/shot_hero.png) | ![open](renders/shot_open.png) |
 | ![front](renders/shot_front.png) | ![top](renders/shot_open_top.png) |
 
+![Reference vs this model](renders/compare_reference.png)
+
 ## Which file to print
 | You have | Print this | What you get |
 |---|---|---|
 | K2 Plus / K2 Pro **with CFS** | `print/modelx_huskers_3color.3mf` in **Creality Print** (or OrcaSlicer). Red PLA in filament 1, white in 2, black in 3; map them to your CFS slots. | The full three-colour car. |
-| Any K2, **no CFS** | `print/modelx_K2_1swap_PLA.gcode` | Load red. The printer pauses once at **Z 44.0 mm**; load black and resume. You get a red body with a black greenhouse. Tyres stay red and the lettering is engraved; colour them with a paint pen if you like. |
+| Any K2, **no CFS** | `print/modelx_K2_1swap_PLA.gcode` | Load red. The printer pauses once at **Z 45.0 mm**; load black and resume. You get a red body with a black greenhouse. Tyres stay red and the lettering is engraved; colour them with a paint pen if you like. |
 | Another printer / slicer | `stl/modelx_red.stl` + `stl/modelx_white.stl` + `stl/modelx_black.stl` loaded as one multi-part object, or the 3MF | Same as the CFS version. |
-| Experimental | `print/modelx_K2_CFS_3color_EXPERIMENTAL.gcode` | PrusaSlicer three-colour G-code: `T0`/`T1`/`T2`, which the K2 firmware's CFS tool change (cut, unload, load, purge into the chute) should handle. **Untested on hardware.** Use the 3MF route unless you want to try it. |
+| Experimental | run `python3 slice.py` to make `print/modelx_K2_CFS_3color_EXPERIMENTAL.gcode` (110 MB, too big for GitHub) | PrusaSlicer three-colour G-code: `T0`/`T1`/`T2`, which the K2 firmware's CFS tool change (cut, unload, load, purge into the chute) should handle. **Untested on hardware.** Use the 3MF route unless you want to try it. |
 
 Settings used (already in the G-code and profiles): 0.4 mm nozzle, **0.2 mm layers** (the gaps are designed for exactly this), 3 walls, 12% gyroid, PLA 220 °C / bed 60 °C, **no supports**, 3 mm brim, thick bridges **off**.
 
 | | Single-swap G-code | CFS three-colour |
 |---|---|---|
-| Print time | about 8 h 50 min (slicer estimate) | about 9 h 55 min printing, plus about 265 CFS filament changes (roughly 2.5 min each, about 11 h). Black tyres and glass put colour changes on almost every layer, so plan on about 21 h. |
-| Filament | about 250 g PLA: 186 g red, 64 g black | 115 g red, 160 g black, under 1 g white, plus purge from the changes (roughly 100–150 g) |
+| Print time | about 9 h 45 min (slicer estimate) | about 13 h 40 min printing plus about 435 CFS filament changes (roughly 2.5 min each, about 18 h). The measured black trim (glass, pillars, rocker strip, lights) puts colour changes on most layers, so plan on about 32 h. |
+| Filament | about 250 g PLA | about 77 g red, 222 g black and 1 g white, plus purge from the changes |
 | Size on the bed | 211 × 95 × 70 mm (fits the K2 Pro's 300 × 300 bed) | same |
 
 ## After printing
@@ -37,7 +39,7 @@ Settings used (already in the G-code and profiles): 0.4 mm nozzle, **0.2 mm laye
 5. If a door won't move at all, run a blade along its bottom edge to free the first layer from the sill.
 
 ## How it works
-**Gaps.** Every door is a 2 mm shell cut out of the body surface. The body around it is carved away along the door's whole swept path from closed to fully open, plus a clearance gap. Measured on the finished parts, the closed gap is at least 0.31 mm (front doors) and 0.33 mm (falcon doors), and no door touches the body anywhere in its travel. `check.py` confirms this by rotating each door through its full range in 1° steps and intersecting it with the body.
+**Gaps.** Every door is a 2 mm shell cut out of the body surface. The body around it is carved away along the door's whole swept path from closed to fully open, plus a clearance gap. Measured on the finished parts, the closed gap is at least 0.24 mm (front doors) and 0.30 mm (falcon doors), and no door touches the body anywhere in its travel. `check.py` confirms this by rotating each door through its full range in 1° steps and intersecting it with the body.
 
 **Front doors.** Each has a vertical pin hinge just behind the door's front edge: a 2.6 mm pin with 0.35 mm radial clearance, and 45° conical knuckle joints so nothing overhangs. The hinge sits in a narrow channel at the fender seam, printed black so it reads as a shadowed door gap. The doors open to 72°.
 
@@ -60,7 +62,7 @@ The overall size and layout match Tesla's published dimensions for the 2021+ Mod
 | Overhang front / rear | 988 / 1,104 mm | 40.8 / 46.0 mm |
 | Tyres | 265/45R20 front, 275/45R20 rear (746 / 756 mm) | 31.1 / 31.5 mm |
 
-The surfaces in between come from proportions and published key points, not from Tesla CAD. Tesla doesn't publish CAD, and blueprint sites were blocked from this session. Expect the silhouette, stance and colour layout to read as a Model X, but not every curve to match a scan. Things simplified for printing:
+The body surface itself is **measured from a 3D reference of the 2021+ Model X**: the public model in [TariqKichawele/tesla-3D](https://github.com/TariqKichawele/tesla-3D) (`public/models/model-x.glb`). Its overall size matches the owner's-manual numbers above. `ref.py` downloads it and measures it three ways: height maps from above and below, and the half-width at every point seen from the side. It also records where the glass, black trim and lights are. `build.py` lofts its own printable skin from those measurements, and takes the door cut lines, B-pillar, window frame, mirror and wheel positions from the same reference. The reference mesh isn't included here. Details smaller than about 0.3 mm (panel seams, badges) are smoothed away. `renders/compare_reference.png` shows the reference and this model from the same angles. Things simplified for printing:
 - **Falcon doors** use a single roof hinge (a gull-wing motion). The real door has a second, folding hinge at the top of the window.
 - The **keel** under the floor fills the space between the sills and the ground. It's black, so from the side it reads as the shadow under the car.
 - The **wheels** are fixed. They're a 5-double-spoke design in the spirit of the 20" wheels, not a copy of Tesla's.
@@ -75,9 +77,10 @@ The **N** and **HUSKERS** marks belong to the University of Nebraska, and the Mo
 | `stl/modelx_red.stl`, `stl/modelx_white.stl`, `stl/modelx_black.stl` | The three colours, already in print position |
 | `stl/modelx_one_color.stl` | Single-colour version (lettering engraved 0.5 mm) for the one-pause print |
 | `print/*.3mf`, `print/*.gcode`, `print/*.ini` | Print files and the PrusaSlicer profiles that made them |
-| `body.py` | Body shape: published dimensions and silhouette profiles |
+| `ref.py` | Fetches the reference Model X and measures its skin, glass and trim |
+| `body.py` | Body surface from those measurements (with the earlier hand-fitted profiles as a fallback) |
 | `geom.py`, `build.py`, `parts.py` | Door cutting, swept clearances, hinges, detents, wheels, interior, colours |
 | `check.py`, `printability.py` | Door-swing collision check, plus the layer-by-layer and part-against-part print checks |
 | `slice.py`, `export3mf.py`, `shots.py`, `render.py` | Print files, 3MF writer, renders |
 
-Rebuild: `python3 build.py && python3 slice.py && python3 shots.py <cache> 0.200 renders`. Needs numpy, scipy, scikit-image, trimesh, manifold3d, numba and PrusaSlicer 2.7. The cache directory is `$MX_CACHE`, default `/tmp/mx_cache`.
+Rebuild: `python3 ref.py && python3 build.py && python3 slice.py && MX_CACHE=<cache> python3 shots.py <cache> 0.200 renders`. Needs numpy, scipy, scikit-image, trimesh, manifold3d, numba and PrusaSlicer 2.7. The cache directory is `$MX_CACHE`, default `/tmp/mx_cache`.

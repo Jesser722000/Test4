@@ -15,7 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 P = os.environ.get('MX_PRINT', os.path.join(HERE, 'print'))
 os.makedirs(P, exist_ok=True)
 RED, WHITE, BLACK = '#C8102E', '#F3EFE6', '#1A1A1A'
-Z_SWAP = 44.0          # first black layer: the side-glass beltline, behind the hood
+Z_SWAP = 45.0          # first black layer: the side-glass beltline
 
 base = open(os.path.join(HERE, 'print', 'k2_base.ini')).read()
 
