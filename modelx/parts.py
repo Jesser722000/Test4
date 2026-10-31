@@ -59,10 +59,15 @@ def wedge(r0, r1, s0, s1, a0, a1, cone=0.0, rc=None):
     return revolve([(r0, s0 + f(r0)), (r1, s0 + f(r1)), (r1, s1 + f(r1)), (r0, s1 + f(r0))], a0, a1)
 
 
-def teardrop_bore(r, s0, s1):
-    """bore with a 45 deg pointed top (world-up = canonical +Y for the falcon hinge)."""
+def teardrop_bore(r, s0, s1, drop=0.35):
+    """bore with a 45 deg pointed top and its bottom let down by `drop`, so the pin (which
+    bridges between the fixed knuckles) prints >= 3 layers above the door knuckle.
+    World-up is canonical +Y for the falcon hinge."""
     pts = [(r * np.cos(t), r * np.sin(t)) for t in np.radians(np.linspace(135, 405, 40))] + [(0, r * np.sqrt(2))]
-    return CrossSection([pts]).extrude(s1 - s0).translate([0, 0, s0])
+    top = CrossSection([pts])
+    low = CrossSection.circle(r, 48)
+    cs = CrossSection.batch_hull([low, low.translate([0, -drop])]) + top
+    return cs.extrude(s1 - s0).translate([0, 0, s0])
 
 
 # ------------------------------------------------------------------ hold-open detent
@@ -72,17 +77,19 @@ def teardrop_bore(r, s0, s1):
 # raised lobe in between, so the door clicks shut and clicks open and stays there.
 NUB = 240.0
 CAM_LO = geom.RING_R                 # notch bottoms
-CAM_HI = geom.RING_R + 0.60          # lobe: 0.35 clearance + 0.25 interference
-NUB_R = geom.RING_R + 0.35           # nub tip radius
+NUB_R = geom.RING_R + 0.45           # nub tip radius: 0.45 clearance in the notches (>2 layers)
+CAM_HI = NUB_R + 0.25                # lobe: 0.25 interference with the nub
+NUB_HALF = 9.0                       # nub half-width (deg): ~0.9 mm, two extrusion lines
 BEAM_R = (CAM_HI + 0.35, CAM_HI + 1.35)
-SLOT_R = (CAM_HI, BEAM_R[1] + 0.45)
+SLOT_R = (CAM_HI, BEAM_R[1] + 0.65)
 
 
 def cam_r(phi, theta_max):
     """cam radius at door-frame angle phi (deg)."""
     c, o = NUB, NUB - theta_max
-    pts = [(o - 15, CAM_HI), (o - 5, CAM_LO), (o + 5, CAM_LO), (o + 15, CAM_HI), (c - 15, CAM_HI),
-           (c - 5, CAM_LO), (c + 5, CAM_LO), (c + 15, CAM_HI)]
+    w, ramp = NUB_HALF + 4, 12        # notch half-width and ramp length (deg)
+    pts = [(o - w - ramp, CAM_HI), (o - w, CAM_LO), (o + w, CAM_LO), (o + w + ramp, CAM_HI),
+           (c - w - ramp, CAM_HI), (c - w, CAM_LO), (c + w, CAM_LO), (c + w + ramp, CAM_HI)]
     a = np.array(pts)
     return np.interp(np.mod(phi, 360), a[:, 0], a[:, 1], left=CAM_HI, right=CAM_HI)
 
@@ -124,7 +131,7 @@ def hinge_parts(h, cone=0.0, teardrop=False, detents=()):
                 sl, bm = (lo - gax, root), (lo, root + 0.02)
             slots.append(wedge(SLOT_R[0], SLOT_R[1], *sl, geom.FIN[0] - 1, geom.FIN[1] + 1))
             beams.append(wedge(BEAM_R[0], BEAM_R[1], *bm, NUB - 15, NUB + 15))
-            beams.append(wedge(NUB_R, BEAM_R[0] + 0.05, lo, hi, NUB - 4, NUB + 4))
+            beams.append(wedge(NUB_R, BEAM_R[0] + 0.05, lo, hi, NUB - NUB_HALF, NUB + NUB_HALF))
         else:
             door_add.append(ring(Rb - 0.2, R, lo, hi, cone, rc))
             body_sub.append(ring(Rp + 0.01, rc, lo - gax, hi + gax, cone, rc))

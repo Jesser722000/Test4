@@ -4,7 +4,7 @@
     render(path, parts, yaw, pitch, W=1600, H=1000, dist=None, fov=24)
 
 parts: list of (trimesh.Trimesh, '#rrggbb').  World axes: X toward the rear of
-the car, Y to the car's left, Z up.  yaw 0 looks at the car's left side.
+the car, Y to the car's right, Z up.  yaw 0 looks at the +Y (right) side.
 """
 import numpy as np, trimesh
 from numba import njit

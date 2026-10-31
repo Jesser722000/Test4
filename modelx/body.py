@@ -1,7 +1,7 @@
 """Tesla Model X (2021+) outer body as a signed distance field.
 
 All profile numbers are full-size millimetres measured from the foremost point
-of the front bumper (x, rearward), the centreline (y, to the car's left) and the
+of the front bumper (x, rearward), the centreline (y, to the car's right) and the
 ground (z, up), at medium ride height on 20" wheels.  Hard numbers come from the
 owner's manual (length 5057, wheelbase 2965, overhangs 988 / 1104, width 1999,
 height 1680, track 1705 / 1710, tyres 265/45R20 front and 275/45R20 rear); the

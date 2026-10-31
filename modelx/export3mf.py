@@ -26,6 +26,11 @@ def write(path, volumes, name='ModelX', config=None, color_change=None):
     off = 0
     first = 0
     for vname, m, ext in volumes:
+        m = m.copy()
+        m.vertices = np.round(m.vertices, 4)          # what gets written
+        m.merge_vertices()
+        m.update_faces(m.nondegenerate_faces())
+        m.remove_unreferenced_vertices()
         v = np.asarray(m.vertices, float)
         f = np.asarray(m.faces, np.int64) + off
         verts.append(v)

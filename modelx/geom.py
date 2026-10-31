@@ -5,8 +5,8 @@ body.sdf (full-size mm, scaled by 1/24).  Doors are cut out of it as shells;
 each door's swept volume (closed -> fully open) is carved out of the body with a
 clearance gap, so a door can never hit the body while it moves.
 
-Axes: X rearward from the front bumper, Y to the car's left, Z up, bed at z = 0.
-Doors are modelled on the left side (y > 0) and mirrored.
+Axes: X rearward from the front bumper, Y to the car's right (Y = up x rearward), Z up,
+bed at z = 0.  Doors are modelled on the +Y side (names ending _L) and mirrored.
 """
 import numpy as np
 from scipy import ndimage
@@ -17,7 +17,7 @@ S = 24.0                       # scale 1:24
 H = 0.2                        # voxel size
 
 # ------------------------------------------------------------------ clearances
-G = 0.40                       # door to body gap (all round, 2 layers at 0.2)
+G = 0.50                       # door to body gap (all round; ~0.35+ after meshing)
 T = 2.0                        # door skin thickness
 M = 1.6                        # jamb flange left round each door opening
 
@@ -195,7 +195,10 @@ def door_field(F, sub, kind, hinge, h=H):
         D = np.maximum(D, arcd)
     else:
         z_under = hinge.z_under
-        slab = np.maximum(f, z_under - Z)
+        # flat bridged underside, plus a 45 deg keel along its inboard edge so the bridge
+        # lines are anchored on both sides (the keel grows from a single line over the spine)
+        keel = np.maximum(0.0, 2.0 - np.abs(Y - 7.5))
+        slab = np.maximum(f, z_under - keel - Z)
         D = np.minimum(np.maximum(f, -f - T), slab)
         D = np.maximum(D, sp - f)
         arcd = np.minimum(-du, r - 3.0)                  # inboard of the axis only within r = 3

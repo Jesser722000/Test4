@@ -49,9 +49,55 @@ for k in range(1, len(L)):
         float_rows.append((zs[k], g.area, gap, c.x, c.y))
 
 print(f'{len(L)} layers, {len(float_rows)} islands that start without material directly below')
-bad = [r for r in float_rows if r[2] is None or r[2] > 0.45]
-ok = [r for r in float_rows if not (r[2] is None or r[2] > 0.45)]
-print(f'  starting over a 1-2 layer gap (print-in-place, by design): {len(ok)}, total area {sum(r[1] for r in ok):.1f} mm2')
-print(f'  floating higher than 2 layers: {len(bad)}')
+bad = [r for r in float_rows if r[2] is None or r[2] > 0.65]
+ok = [r for r in float_rows if not (r[2] is None or r[2] > 0.65)]
+print(f'  starting over a 1-3 layer gap (print-in-place, by design): {len(ok)}, total area {sum(r[1] for r in ok):.1f} mm2')
+print(f'  floating higher than 3 layers: {len(bad)}')
 for z, a, gap, x, y in sorted(bad, key=lambda r: -r[1])[:40]:
     print(f'    z={z:6.2f}  area={a:7.2f} mm2  gap={"none" if gap is None else f"{gap:.1f} mm"}  at x={x:6.1f} y={y:6.1f}')
+
+
+# ---------------------------------------------------------------- moving parts vs body
+# printability.py model.stl [layer] --parts body.stl door1.stl door2.stl ...
+# Slices each part on its own and flags places where one part prints directly on top of
+# another (fused) or with only one empty layer between them (likely to sag and stick),
+# plus same-layer gaps the slicer may close.
+if '--parts' in sys.argv:
+    names = sys.argv[sys.argv.index('--parts') + 1:]
+    P = []
+    for n in names:
+        mm = trimesh.load(n)
+        ss = mm.section_multiplane(plane_origin=[0, 0, 0], plane_normal=[0, 0, 1], heights=zs)
+        P.append([polys(s) for s in ss])
+    print('\nmoving parts vs body:', ', '.join(n.split('/')[-1] for n in names))
+    worst = []
+    for a in range(len(P)):
+        for b in range(len(P)):
+            if a == b:
+                continue
+            for k in range(2, len(zs)):
+                A, A1 = P[a][k], P[a][k - 1]
+                if A.is_empty:
+                    continue
+                fused = A.intersection(P[b][k - 1]).area
+                one = A.difference(A1.buffer(0.2)).intersection(P[b][k - 2]).difference(P[b][k - 1]).area
+                if fused > 0.05 or one > 0.3:
+                    worst.append((zs[k], names[a].split('/')[-1], names[b].split('/')[-1], fused, one))
+            if a < b:
+                for k in range(len(zs)):
+                    A, Bk = P[a][k], P[b][k]
+                    if A.is_empty or Bk.is_empty:
+                        continue
+                    d = A.distance(Bk)
+                    if d < 0.25:
+                        worst.append((zs[k], names[a].split('/')[-1], names[b].split('/')[-1], -d, 0))
+    fz = [w for w in worst if w[3] > 0.05]
+    oz = [w for w in worst if w[3] <= 0.05 and w[4] > 0.3]
+    xy = [w for w in worst if w[3] < 0]
+    print(f'  {len(fz)} layer(s) where a part prints directly on another (fused)')
+    print(f'  {len(oz)} layer(s) where an unsupported region sits only one empty layer above another part')
+    print(f'  {len(xy)} layer(s) with a same-layer gap under 0.25 mm')
+    for z, a_, b_, f_, o_ in sorted(fz + oz, key=lambda w: -(w[3] + w[4]))[:25]:
+        print(f'    z={z:6.2f}  {a_} over {b_}: fused {f_:.2f} mm2, one-layer gap {o_:.2f} mm2')
+    for z, a_, b_, d_, _ in sorted(xy, key=lambda w: w[3])[:10]:
+        print(f'    z={z:6.2f}  {a_} / {b_}: same-layer gap {-d_:.3f} mm')

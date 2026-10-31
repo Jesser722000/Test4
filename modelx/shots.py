@@ -7,9 +7,15 @@ from PIL import Image
 
 C, tag, O = sys.argv[1], sys.argv[2], sys.argv[3]
 os.makedirs(O, exist_ok=True)
-RED, WH = '#c8102e', '#f3efe6'
-ld = lambda n: trimesh.load(os.path.join(C, f'{n}_{tag}.stl'))
-body = [(ld('body_red'), RED), (ld('body_white'), WH)]
+RED, WH, BLK = '#c8102e', '#f3efe6', '#262626'
+COL = {'red': RED, 'white': WH, 'black': BLK}
+def ld(n):
+    m = trimesh.load(os.path.join(C, f'{n}_{tag}.stl'))
+    return m if isinstance(m, trimesh.Trimesh) and len(m.faces) else None
+
+
+
+body = [(ld(f'body_{c}'), COL[c]) for c in COL if ld(f'body_{c}') is not None]
 FH, KH = geom.front_hinge(), geom.falcon_hinge()
 
 
@@ -20,8 +26,11 @@ def mir_h(h):
 def door(k, th):
     h = {'front_L': FH, 'falcon_L': KH, 'front_R': FH.mirrored(), 'falcon_R': KH.mirrored()}[k]
     out = []
-    for c, col in (('red', RED), ('white', WH)):
-        m = ld(f'door_{k}_{c}').copy()
+    for c, col in COL.items():
+        m = ld(f'door_{k}_{c}')
+        if m is None:
+            continue
+        m = m.copy()
         R = h.rot(th * h.theta_max)
         m.vertices = (m.vertices - h.o) @ R.T + h.o
         out.append((m, col))
@@ -44,8 +53,8 @@ shots = {
     'open_rear': (scene(1.0), -145, 20, 24),
     'open_top': (scene(1.0), -10, 62, 24),
     'side': (scene(0), 0, 0, 10),
-    'front': (scene(0), -90, 6, 10),
-    'rear': (scene(0), 90, 6, 10),
+    'front': (scene(0), 90, 6, 10),
+    'rear': (scene(0), -90, 6, 10),
     'top': (scene(0), 0, 89.9, 10),
 }
 for n, (sc, yaw, pitch, fov) in shots.items():
